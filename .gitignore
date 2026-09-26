@@ -1,1 +1,29 @@
-/backend/src/.env
+# Зависимости Frontend
+node_modules/
+frontend/node_modules/
+.vite/
+frontend/.vite/
+dist/
+build/
+
+# Кэш Python / Backend
+__pycache__/
+*.py[cod]
+*$py.class
+backend/**/__pycache__/
+backend/**/*.pyc
+.venv/
+venv/
+ENV/
+*.sqlite3
+
+# Системные файлы и логи
+.DS_Store
+*.log
+.vscode/
+
+# Переменные окружения и приватные ключи
+.env
+*.env
+backend/src/.env
+backend/.env

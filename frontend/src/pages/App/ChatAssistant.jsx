@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
+import "./ChatAssistant.css";
 
 // Быстрые подсказки для студента
 const QUICK_PROMPTS = [
