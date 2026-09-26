@@ -270,7 +270,7 @@ async def ask_financial_advisor(
 
     created_goal: Optional[Goal] = None
 
-    # 3. Сохранение цели в БД, если пользователь установил флаг
+    # 3. Сохранение цели в БД, если пользователь установил флаг и цель была извлечена
     if request.save_as_goal and ai_result.get("extracted_goal"):
         goal_info = ai_result["extracted_goal"]
         target_amount = float(goal_info.get("target_amount", 0.0))

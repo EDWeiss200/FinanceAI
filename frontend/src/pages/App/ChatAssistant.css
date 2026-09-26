@@ -1,17 +1,23 @@
-/* Стили интерактивного чата с финансовым ИИ */
+/* Современный дизайн интерактивного чата с финансовым ИИ-ассистентом */
 
 .chat-container {
   overflow: hidden;
   box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  position: relative;
 }
 
-/* Шапка чата */
+/* =====================================================================
+   1. Шапка чата
+   ===================================================================== */
 .chat-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding-bottom: 12px;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+  padding: 4px 6px 16px 6px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.07);
 }
 
 .chat-header-info {
@@ -23,124 +29,184 @@
 .chat-avatar {
   width: 44px;
   height: 44px;
-  background-color: #3b8e68;
-  border-radius: 50%;
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  border-radius: 14px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 22px;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.25);
+  transition: transform 0.2s ease;
+}
+
+.chat-avatar:hover {
+  transform: scale(1.05);
+}
+
+.avatar-icon {
+  font-size: 20px;
+  color: #ffffff;
+}
+
+.chat-title-block {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
 
 .chat-title {
-  font-size: 18px;
+  font-size: 17px;
   font-weight: 700;
-  color: #1e1e1e;
+  color: #1a1a1a;
+  letter-spacing: -0.3px;
   line-height: 1.2;
 }
 
 .chat-status {
   font-size: 12px;
-  color: #555555;
+  font-weight: 500;
+  color: #059669;
   display: flex;
   align-items: center;
   gap: 6px;
-  margin-top: 2px;
 }
 
 .status-dot {
-  width: 8px;
-  height: 8px;
-  background-color: #2e7d32;
+  width: 7px;
+  height: 7px;
+  background-color: #10b981;
   border-radius: 50%;
   display: inline-block;
 }
 
+.status-dot.pulse {
+  box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.5);
+  animation: status-pulse 2s infinite;
+}
+
+@keyframes status-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.6);
+  }
+  70% {
+    box-shadow: 0 0 0 6px rgba(16, 185, 129, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0);
+  }
+}
+
 .chat-clear-btn {
-  background: none;
-  border: 1px solid rgba(0, 0, 0, 0.12);
+  background: rgba(255, 255, 255, 0.6);
+  border: 1px solid rgba(0, 0, 0, 0.08);
   border-radius: 20px;
-  padding: 6px 12px;
+  padding: 6px 14px;
   font-size: 12px;
-  color: #444;
+  font-weight: 500;
+  color: #555;
   cursor: pointer;
-  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  backdrop-filter: blur(8px);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .chat-clear-btn:hover {
-  background-color: rgba(0, 0, 0, 0.05);
-  color: #111;
-}
-
-/* Быстрые подсказки (chips) */
-.chat-chips-container {
-  display: flex;
-  gap: 8px;
-  overflow-x: auto;
-  padding: 10px 0;
-  scrollbar-width: thin;
-}
-
-.chat-chips-container::-webkit-scrollbar {
-  height: 4px;
-}
-
-.chat-chips-container::-webkit-scrollbar-thumb {
-  background-color: rgba(0, 0, 0, 0.15);
-  border-radius: 4px;
-}
-
-.chat-chip-btn {
-  background-color: #ffffff;
-  border: 1px solid #d4cbbd;
-  color: #2d2d2d;
-  font-size: 12px;
-  font-weight: 500;
-  padding: 6px 12px;
-  border-radius: 16px;
-  white-space: nowrap;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
-}
-
-.chat-chip-btn:hover:not(:disabled) {
-  background-color: #3b8e68;
-  color: #ffffff;
-  border-color: #3b8e68;
+  background: #ffffff;
+  color: #dc2626;
+  border-color: rgba(220, 38, 38, 0.2);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
   transform: translateY(-1px);
 }
 
-.chat-chip-btn:disabled {
+.clear-icon {
+  font-size: 12px;
+}
+
+/* =====================================================================
+   2. Горизонтальная панель подсказок (chips)
+   ===================================================================== */
+.chat-chips-bar {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 12px 2px 8px 2px;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.chat-chips-bar::-webkit-scrollbar {
+  display: none;
+}
+
+.chat-chip {
+  background: rgba(255, 255, 255, 0.85);
+  border: 1px solid rgba(0, 0, 0, 0.07);
+  color: #374151;
+  font-size: 12.5px;
+  font-weight: 500;
+  padding: 7px 14px;
+  border-radius: 20px;
+  white-space: nowrap;
+  cursor: pointer;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.03);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  flex-shrink: 0;
+}
+
+.chat-chip:hover:not(:disabled) {
+  background: #ffffff;
+  color: #059669;
+  border-color: rgba(16, 185, 129, 0.4);
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.12);
+  transform: translateY(-2px);
+}
+
+.chat-chip:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
 
-/* Область сообщений */
+/* =====================================================================
+   3. Тело сообщений и скролл
+   ===================================================================== */
 .chat-messages-scroll {
   flex: 1;
   overflow-y: auto;
-  padding: 10px 5px;
+  padding: 12px 6px;
   display: flex;
   flex-direction: column;
-  gap: 14px;
-  margin: 10px 0;
+  gap: 16px;
+  margin: 6px 0 10px 0;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0, 0, 0, 0.15) transparent;
 }
 
 .chat-messages-scroll::-webkit-scrollbar {
-  width: 6px;
+  width: 5px;
 }
 
 .chat-messages-scroll::-webkit-scrollbar-thumb {
-  background-color: rgba(0, 0, 0, 0.15);
-  border-radius: 3px;
+  background: rgba(0, 0, 0, 0.15);
+  border-radius: 4px;
 }
 
-/* Строка сообщения */
 .chat-message-row {
   display: flex;
   gap: 10px;
   align-items: flex-end;
+  animation: message-fade-in 0.25s ease-out;
+}
+
+@keyframes message-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .chat-message-row.user {
@@ -154,62 +220,70 @@
 .msg-avatar {
   width: 32px;
   height: 32px;
-  background-color: #3b8e68;
-  border-radius: 50%;
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  border-radius: 10px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 16px;
+  font-size: 15px;
   flex-shrink: 0;
-  margin-bottom: 4px;
+  margin-bottom: 2px;
+  box-shadow: 0 2px 6px rgba(16, 185, 129, 0.2);
 }
 
-/* Баблы сообщений */
+/* =====================================================================
+   4. Баблы сообщений
+   ===================================================================== */
 .chat-bubble {
-  max-width: 82%;
+  max-width: 84%;
   padding: 14px 18px;
   border-radius: 20px;
-  font-size: 15px;
-  line-height: 1.5;
+  font-size: 14.5px;
+  line-height: 1.55;
   text-align: left;
   position: relative;
   word-break: break-word;
 }
 
 .chat-bubble.user {
-  background-color: #2b2b2b;
+  background: linear-gradient(135deg, #262626 0%, #171717 100%);
   color: #ffffff;
-  border-bottom-right-radius: 4px;
-  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.15);
+  border-bottom-right-radius: 6px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.12);
 }
 
 .chat-bubble.assistant {
-  background-color: #ffffff;
-  color: #1e1e1e;
-  border-bottom-left-radius: 4px;
-  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.08);
+  background: #ffffff;
+  color: #1f2937;
+  border-bottom-left-radius: 6px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
   border: 1px solid rgba(0, 0, 0, 0.05);
 }
 
 .chat-bubble-text {
   white-space: pre-wrap;
+  font-size: 14.5px;
+  line-height: 1.55;
 }
 
 .chat-bubble-time {
-  font-size: 11px;
+  font-size: 10.5px;
   margin-top: 6px;
-  opacity: 0.6;
+  opacity: 0.55;
   text-align: right;
+  font-weight: 500;
 }
 
-/* Карточка точного расчета (Tool Calling) */
+/* =====================================================================
+   5. Карточка расчета финансового плана
+   ===================================================================== */
 .chat-calc-card {
   margin-top: 14px;
-  background-color: #faf7f2;
-  border: 1px solid #e0d7c7;
+  background: #fbfbfd;
+  border: 1px solid #e5e7eb;
   border-radius: 16px;
-  padding: 14px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+  padding: 16px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.03);
 }
 
 .calc-card-header {
@@ -218,86 +292,97 @@
   align-items: center;
   flex-wrap: wrap;
   gap: 8px;
-  margin-bottom: 12px;
+  margin-bottom: 14px;
 }
 
 .calc-badge {
   font-size: 12px;
   font-weight: 700;
-  padding: 4px 10px;
-  border-radius: 12px;
+  padding: 5px 12px;
+  border-radius: 20px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
 }
 
 .badge-success {
-  background-color: #e8f5e9;
-  color: #2e7d32;
+  background: #ecfdf5;
+  color: #047857;
+  border: 1px solid #a7f3d0;
 }
 
 .badge-warning {
-  background-color: #fff3e0;
-  color: #e65100;
+  background: #fffbeb;
+  color: #b45309;
+  border: 1px solid #fde68a;
 }
 
 .calc-badge-goal {
-  font-size: 12px;
+  font-size: 11.5px;
   font-weight: 600;
-  color: #1976d2;
-  background-color: #e3f2fd;
-  padding: 4px 10px;
-  border-radius: 12px;
+  color: #2563eb;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  padding: 5px 12px;
+  border-radius: 20px;
 }
 
 .calc-metrics-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 8px;
-  margin-bottom: 12px;
+  gap: 10px;
+  margin-bottom: 14px;
 }
 
 .calc-metric-item {
-  background-color: #ffffff;
-  padding: 10px;
+  background: #ffffff;
+  padding: 12px 10px;
   border-radius: 12px;
   text-align: center;
-  border: 1px solid rgba(0, 0, 0, 0.04);
+  border: 1px solid #f0f0f2;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.02);
 }
 
 .metric-label {
   font-size: 11px;
-  color: #777;
+  color: #6b7280;
   margin-bottom: 4px;
+  font-weight: 500;
 }
 
 .metric-value {
   font-size: 15px;
   font-weight: 700;
-  color: #111;
+  color: #111827;
+  letter-spacing: -0.3px;
 }
 
 .metric-sub {
   font-size: 10px;
-  color: #4caf50;
-  margin-top: 2px;
-}
-
-.metric-sub.stress {
-  color: #d32f2f;
+  color: #059669;
+  margin-top: 3px;
   font-weight: 600;
 }
 
-/* Действия для студента */
+.metric-sub.stress {
+  color: #dc2626;
+}
+
 .calc-actions-section {
-  background-color: #ffffff;
+  background: #ffffff;
   border-radius: 12px;
-  padding: 10px 12px;
-  margin-bottom: 10px;
-  border-left: 3px solid #3b8e68;
+  padding: 12px 14px;
+  margin-bottom: 12px;
+  border-left: 3px solid #10b981;
+  border: 1px solid #f0f0f2;
+  border-left-width: 3.5px;
+  border-left-color: #10b981;
 }
 
 .actions-title {
   font-size: 12px;
   font-weight: 700;
-  color: #333;
+  color: #1f2937;
   margin-bottom: 6px;
 }
 
@@ -305,59 +390,61 @@
   margin: 0;
   padding-left: 18px;
   font-size: 12px;
-  color: #444;
+  color: #4b5563;
+  line-height: 1.5;
 }
 
 .actions-list li {
   margin-bottom: 4px;
 }
 
-/* Источники */
 .calc-sources-section {
-  padding-top: 6px;
+  padding-top: 8px;
   border-top: 1px dashed rgba(0, 0, 0, 0.1);
 }
 
 .sources-title {
   font-size: 11px;
   font-weight: 600;
-  color: #666;
-  margin-bottom: 4px;
+  color: #6b7280;
+  margin-bottom: 6px;
 }
 
 .sources-links {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 5px;
 }
 
 .source-link {
-  font-size: 11px;
-  color: #1976d2;
+  font-size: 11.5px;
+  color: #2563eb;
   text-decoration: none;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  font-weight: 500;
 }
 
 .source-link:hover {
   text-decoration: underline;
+  color: #1d4ed8;
 }
 
-/* Анимация набора текста */
-.typing {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  padding: 12px 18px;
+/* =====================================================================
+   6. Анимация набора текста
+   ===================================================================== */
+.chat-bubble.typing {
+  padding: 14px 20px;
 }
 
 .dot {
-  width: 7px;
-  height: 7px;
-  background-color: #888;
+  width: 6px;
+  height: 6px;
+  background-color: #9ca3af;
   border-radius: 50%;
-  animation: bounce 1.4s infinite ease-in-out both;
+  animation: dot-pulse 1.4s infinite ease-in-out both;
+  display: inline-block;
 }
 
 .dot:nth-child(1) {
@@ -368,53 +455,68 @@
   animation-delay: -0.16s;
 }
 
-@keyframes bounce {
+@keyframes dot-pulse {
   0%, 80%, 100% {
     transform: scale(0);
+    opacity: 0.3;
   }
   40% {
-    transform: scale(1);
+    transform: scale(1.1);
+    opacity: 1;
   }
 }
 
-/* Подвал и строка ввода */
+/* =====================================================================
+   7. Панель ввода (Footer)
+   ===================================================================== */
 .chat-footer-controls {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
+  padding-top: 6px;
 }
 
 .chat-goal-toggle {
   display: flex;
   align-items: center;
   font-size: 12px;
-  color: #555;
-  padding-left: 10px;
+  color: #4b5563;
+  padding-left: 8px;
 }
 
 .chat-goal-toggle label {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   cursor: pointer;
   user-select: none;
+  font-weight: 500;
 }
 
 .chat-goal-toggle input {
   cursor: pointer;
-  accent-color: #3b8e68;
+  width: 15px;
+  height: 15px;
+  accent-color: #10b981;
 }
 
 .chat-input-bar-enhanced {
   width: 100%;
-  height: 65px;
-  background-color: #525252;
-  border-radius: 35px;
+  height: 62px;
+  background: #ffffff;
+  border: 1.5px solid rgba(0, 0, 0, 0.08);
+  border-radius: 32px;
   display: flex;
   align-items: center;
-  padding: 6px 10px 6px 20px;
-  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.2);
+  padding: 6px 8px 6px 20px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
   box-sizing: border-box;
+  transition: all 0.25s ease;
+}
+
+.chat-input-bar-enhanced:focus-within {
+  border-color: #10b981;
+  box-shadow: 0 4px 20px rgba(16, 185, 129, 0.15);
 }
 
 .chat-text-input {
@@ -422,39 +524,49 @@
   background: none;
   border: none;
   outline: none;
-  color: #ffffff;
-  font-size: 15px;
+  color: #111827;
+  font-size: 14.5px;
+  font-weight: 500;
   padding: 8px 10px 8px 0;
 }
 
 .chat-text-input::placeholder {
-  color: #b5b5b5;
+  color: #9ca3af;
   font-size: 14px;
+  font-weight: 400;
 }
 
 .chat-send-btn {
-  width: 48px;
-  height: 48px;
-  background-color: #3b8e68;
+  width: 46px;
+  height: 46px;
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
   border: none;
   border-radius: 50%;
   color: #ffffff;
-  font-size: 18px;
+  font-size: 16px;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   flex-shrink: 0;
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
 }
 
 .chat-send-btn:hover:not(:disabled) {
-  background-color: #2f7353;
-  transform: scale(1.05);
+  background: linear-gradient(135deg, #059669 0%, #047857 100%);
+  transform: scale(1.06);
+  box-shadow: 0 6px 16px rgba(16, 185, 129, 0.4);
+}
+
+.chat-send-btn:active:not(:disabled) {
+  transform: scale(0.96);
 }
 
 .chat-send-btn:disabled {
-  background-color: #6e6e6e;
-  opacity: 0.6;
+  background: #e5e7eb;
+  color: #9ca3af;
+  box-shadow: none;
   cursor: not-allowed;
+  opacity: 0.8;
 }

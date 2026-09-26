@@ -31,6 +31,242 @@ SERVICE_LIMITATIONS = (
 
 
 # =====================================================================
+# 0. Классификация запроса пользователя
+# =====================================================================
+
+# Паттерны запросов, которые НЕ являются финансовыми
+OFF_TOPIC_PATTERNS = [
+    # Программирование и код
+    r"\b(class|def|function|import|return|console\.log|System\.out|public\s+static|int\s+main|void|println)\b",
+    r"\b(java|python|javascript|c\+\+|html|css|react|django|flask|spring|kotlin|swift)\b",
+    r"\b(напиши|создай|сгенерируй|покажи)\s+(код|класс|функцию|программу|скрипт|метод|алгоритм)\b",
+    # Домашние задания не по финансам
+    r"\b(реферат|сочинение|эссе|курсовая|диплом)\s+(на\s+тему|по\s+(физике|химии|истории|биологии|литературе|математике))\b",
+    # Общие вопросы, приветствия и болтовня (включая сленг: бро, чувак, друг и т.д.)
+    r"^\s*(привет|здравствуй|хай|хей|здарова|салам|добрый\s+(день|вечер|утро)|доброе\s+утро|как дела|как ты|что делаешь|кто ты|расскажи о себе|расскажи анекдот|спасибо|пока|до свидания)\b",
+    r"^\s*(hi|hello|hey|how are you|what'?s up|good morning|good night)\b",
+    # Рецепты, погода, развлечения
+    r"\b(рецепт|погода|фильм|сериал|музыка|песня|игра|играть)\b",
+]
+
+# Паттерны рискованных финансовых запросов
+RISKY_PATTERNS = {
+    # Иностранные валюты — работаем только с рублями
+    "foreign_currency": r"\b(\d+)\s*(тенге|теньге|долларо?в?|евро|\$|€|£|¥|₸|usd|eur|gbp|kzt|грн|гривен|юаней?|йен[ыа]?|фунто?в?|крон[ыа]?)\b",
+    # Инвестиционные вопросы (ИИР запрещены)
+    "investment": r"\b(вложить|вкладывать|куда\s+вложить|инвестиц|инвестировать|акции|облигации|криптовалют[аыуе]|крипт[ауеы]?|биткоин|btc|eth|ethereum|трейдинг|форекс|forex|брокер|ценные\s+бумаги|фондов(?:ый|ого)?\s+рын(?:ок|ке))\b",
+    # Кредиты и долги (не в компетенции)
+    "credit": r"\b(кредит|ипотек[аеу]|займ|микрозайм|рассрочк[аеу]|долг[иу]|коллектор)\b",
+    # Нереальные суммы для студента
+    "unrealistic_amount": None,  # Проверяется отдельной логикой
+    # Азартные игры и мошенничество
+    "gambling": r"\b(казино|ставк[аиу]|букмекер|тотализатор|лотере[яюи]|пирамид[аеу]|быстрый заработок|заработать без вложений|финансовая пирамида|схема|обман)\b",
+}
+
+# Слова-маркеры финансовой тематики
+FINANCIAL_KEYWORDS = [
+    r"\b(накопить|копить|сберечь|отложить|сэкономить|экономить|бюджет|финанс)\b",
+    r"\b(доход[ыа]?|расход[ыа]?|зарплат[аеу]|стипенди[яюи]|подработк[аеу])\b",
+    r"\b(денег|деньги|денежн|рубл[ейяь]|тыс\.?|₽|руб\.?)\b",
+    r"\b(трат[аыу]|покупк[аиу]|купить|цена|стоимость|цель)\b",
+    r"\b(баланс|счет|карт[аеу]|вклад|сбережени[яе])\b",
+    r"\b(подписк[аиу]|платеж[ие]|коммуналк[аеу]|аренд[аеу])\b",
+]
+
+
+def classify_query(user_query: str) -> Dict[str, Any]:
+    """
+    Классифицирует запрос пользователя по типам:
+    - 'financial' — корректный финансовый запрос → полный пайплайн с Tool Calling
+    - 'off_topic' — нерелевантный запрос (болтовня, программирование) → лёгкий текстовый ответ
+    - 'risky' — рискованный запрос (иностранная валюта, инвестиции, азарт) → обозначение ограничений
+    """
+    query_lower = user_query.strip().lower()
+
+    # 1. Проверка на полностью нерелевантный запрос
+    for pattern in OFF_TOPIC_PATTERNS:
+        if re.search(pattern, query_lower, re.IGNORECASE):
+            # Но если есть ещё и финансовые ключевые слова — это финансовый запрос с лишним контекстом
+            has_financial = any(re.search(fp, query_lower, re.IGNORECASE) for fp in FINANCIAL_KEYWORDS)
+            if not has_financial:
+                return {
+                    "type": "off_topic",
+                    "reason": "Запрос не относится к финансовой тематике.",
+                    "details": None,
+                }
+
+    # 2. Проверка на рискованные паттерны
+    for risk_type, pattern in RISKY_PATTERNS.items():
+        if pattern is None:
+            continue
+        match = re.search(pattern, query_lower, re.IGNORECASE)
+        if match:
+            return {
+                "type": "risky",
+                "reason": risk_type,
+                "details": match.group(0),
+            }
+
+    # 3. Проверка на нереально маленькие/большие суммы для студента
+    amount_match = re.search(r"(\d+[\s_]*\d*)\s*(руб|₽|р\b|тыс)", query_lower)
+    if amount_match:
+        raw = re.sub(r"[\s_]+", "", amount_match.group(1))
+        try:
+            val = float(raw)
+            unit = (amount_match.group(2) or "").lower()
+            if "тыс" in unit and val < 100000:
+                val *= 1000.0
+            # Слишком маленькие суммы (меньше 100 рублей)
+            if 0 < val < 100:
+                return {
+                    "type": "risky",
+                    "reason": "too_small_amount",
+                    "details": f"{val} руб.",
+                }
+            # Нереально большие суммы для студента (свыше 10 млн)
+            if val > 10_000_000:
+                return {
+                    "type": "risky",
+                    "reason": "unrealistic_amount",
+                    "details": f"{val:,.0f} руб.",
+                }
+        except ValueError:
+            pass
+
+    # 4. По умолчанию считаем финансовым запросом
+    return {"type": "financial", "reason": None, "details": None}
+
+
+def build_off_topic_response(user_query: str) -> str:
+    """Формирует корректный ответ на нерелевантный запрос."""
+    query_lower = user_query.strip().lower()
+
+    # Приветствия
+    greetings = ["привет", "здравствуй", "как дела", "hi", "hello", "hey"]
+    if any(g in query_lower for g in greetings):
+        return (
+            "👋 Привет! Я — твой персональный финансовый ИИ-ассистент.\n\n"
+            "Я помогу тебе:\n"
+            "• Рассчитать план накоплений на конкретную цель\n"
+            "• Проанализировать расходы и найти, где можно сэкономить\n"
+            "• Оценить баланс и финансовую подушку безопасности\n\n"
+            "Напиши, на что хочешь накопить или задай вопрос по расходам! 🎯"
+        )
+
+    # Благодарности и прощания
+    farewells = ["спасибо", "пока", "до свидания"]
+    if any(f in query_lower for f in farewells):
+        return (
+            "Рад был помочь! 😊 Если появятся финансовые вопросы — обращайся. "
+            "Удачи с бюджетом и накоплениями!"
+        )
+
+    # Программирование
+    code_keywords = ["class", "def", "function", "код", "программ", "скрипт", "java", "python", "html"]
+    if any(k in query_lower for k in code_keywords):
+        return (
+            "🚫 К сожалению, я не могу помочь с программированием — "
+            "это за пределами моей компетенции.\n\n"
+            "Я — **финансовый ИИ-помощник** и умею:\n"
+            "• Рассчитать план накоплений на любую цель\n"
+            "• Проанализировать структуру доходов и расходов\n"
+            "• Подсказать, где студенту можно сэкономить\n\n"
+            "Попробуй спросить, например: «Хочу накопить на ноутбук 60 000 ₽ за полгода»"
+        )
+
+    # Универсальный ответ для прочих нерелевантных тем
+    return (
+        "🤔 Этот вопрос выходит за рамки моей специализации.\n\n"
+        "Я — **финансовый ИИ-помощник** для студентов и могу помочь с:\n"
+        "• Планированием бюджета и накоплений\n"
+        "• Анализом расходов по категориям\n"
+        "• Оценкой финансовой подушки безопасности\n\n"
+        "Напиши финансовый вопрос, и я с радостью помогу! 💰"
+    )
+
+
+def build_risky_response(risk_reason: str, risk_details: Optional[str] = None) -> str:
+    """Формирует корректный ответ на рискованный запрос с обозначением ограничений."""
+
+    if risk_reason == "foreign_currency":
+        return (
+            f"⚠️ **Ограничение сервиса: валюта**\n\n"
+            f"Обнаружена иностранная валюта в запросе: **{risk_details}**.\n\n"
+            f"Наш сервис работает **исключительно с рублями (₽)**, так как:\n"
+            f"• Данные о доходах и расходах в банковской системе ведутся в рублях\n"
+            f"• Конвертация курсов валют в реальном времени не входит в функциональность MVP\n"
+            f"• Мы не можем гарантировать точность расчётов в иностранной валюте\n\n"
+            f"💡 Переформулируй запрос в рублях, и я сделаю точный расчёт!\n"
+            f"Пример: «Хочу накопить 30 000 ₽ на велосипед за 4 месяца»"
+        )
+
+    if risk_reason == "investment":
+        return (
+            "⚠️ **Ограничение сервиса: инвестиции**\n\n"
+            "Я **не даю индивидуальных инвестиционных рекомендаций (ИИР)** — "
+            "это запрещено для информационно-просветительских сервисов.\n\n"
+            "Мои компетенции:\n"
+            "• Расчёт плана накоплений на конкретную цель\n"
+            "• Анализ бюджета студента с подработкой\n"
+            "• Рекомендации по оптимизации расходов\n\n"
+            "Для инвестиционных вопросов обратись к лицензированному финансовому консультанту "
+            "или изучи материалы на fincult.info (Банк России)."
+        )
+
+    if risk_reason == "credit":
+        return (
+            "⚠️ **Ограничение сервиса: кредиты и займы**\n\n"
+            "Я **не консультирую по кредитам, ипотеке и займам** — "
+            "это требует анализа кредитной истории и индивидуальной оценки рисков.\n\n"
+            "Мои компетенции:\n"
+            "• Помочь спланировать накопления, чтобы обойтись без кредитов\n"
+            "• Рассчитать, сколько нужно откладывать для достижения цели\n"
+            "• Оптимизировать расходы для ускорения накоплений\n\n"
+            "Попробуй спросить: «Хочу накопить 60 000 ₽ — за сколько реально?»"
+        )
+
+    if risk_reason == "gambling":
+        return (
+            "🚫 **Ограничение сервиса**\n\n"
+            "Я не поддерживаю запросы, связанные с азартными играми, "
+            "ставками, финансовыми пирамидами и схемами «быстрого заработка».\n\n"
+            "Единственный надежный способ накопить — это **системное управление бюджетом**: "
+            "контроль расходов, регулярные отчисления и финансовая дисциплина.\n\n"
+            "Готов помочь с реалистичным планом накоплений! 💪"
+        )
+
+    if risk_reason == "too_small_amount":
+        return (
+            f"🤔 Указанная сумма ({risk_details}) слишком мала для составления плана накоплений.\n\n"
+            f"Для полноценного финансового расчёта укажи цель от **100 ₽** и выше.\n\n"
+            f"Примеры:\n"
+            f"• «Хочу накопить 5 000 ₽ на учебники»\n"
+            f"• «Накопить 30 000 ₽ на смартфон за 3 месяца»\n"
+            f"• «Сколько откладывать на ноутбук 60 000 ₽?»"
+        )
+
+    if risk_reason == "unrealistic_amount":
+        return (
+            f"⚠️ **Ограничение: нереалистичная сумма**\n\n"
+            f"Указанная сумма ({risk_details}) значительно превышает "
+            f"типичный бюджет студента с подработкой.\n\n"
+            f"Мой расчётный модуль оптимизирован для целей студентов в диапазоне "
+            f"**1 000 — 1 000 000 ₽**.\n\n"
+            f"Для крупных сумм рекомендую обратиться к персональному финансовому консультанту."
+        )
+
+    # Неизвестный тип риска — generic ответ
+    return (
+        "⚠️ Этот запрос выходит за рамки моих возможностей.\n\n"
+        "Я — финансовый помощник для студентов и специализируюсь на:\n"
+        "• Планировании накоплений на конкретные цели\n"
+        "• Анализе доходов и расходов\n"
+        "• Оптимизации бюджета\n\n"
+        "Переформулируй запрос, и я постараюсь помочь!"
+    )
+
+
+# =====================================================================
 # 1. Python-функция точного математического расчета бюджета и накоплений
 # =====================================================================
 
@@ -49,18 +285,6 @@ def calculate_savings_plan(
     """
     Выполняет строгий математический расчет бюджета и темпа накоплений для студента с подработкой.
     Нейросеть не считает в уме — расчеты полностью детерминированы кодом (требование Т-Банка).
-
-    :param target_amount: Целевая сумма накопления (в рублях).
-    :param monthly_income: Общий ежемесячный подтвержденный доход (в рублях).
-    :param monthly_expenses: Общие ежемесячные расходы (в рублях).
-    :param guaranteed_income: Гарантированный доход (стипендия).
-    :param variable_income: Переменный доход (подработка, смены, фриланс).
-    :param regular_expenses: Обязательные регулярные платежи (подписки, связь, транспорт).
-    :param discretionary_expenses: Гибкие расходы (кафе, развлечения, покупки).
-    :param current_savings: Стартовые сбережения / свободный баланс (в рублях).
-    :param target_months: Желаемый срок достижения цели в месяцах (если указан).
-    :param risk_buffer_percent: Процент подушки безопасности/непредвиденных трат (по умолчанию 10%).
-    :return: Словарь с точными метриками базового и стресс-сценария (период сессии).
     """
     target_amount = float(target_amount)
     monthly_income = float(monthly_income)
@@ -72,12 +296,11 @@ def calculate_savings_plan(
     current_savings = max(0.0, float(current_savings))
     risk_buffer_percent = float(risk_buffer_percent)
 
-    # 1. Свободный денежный поток в месяц (профицит или дефицит)
+    # 1. Свободный денежный поток в месяц
     free_cash_flow = round(monthly_income - monthly_expenses, 2)
-    # Остаток суммы до цели с учетом уже имеющихся средств
     remaining_target = max(0.0, round(target_amount - current_savings, 2))
 
-    # Случай А: Накоплений уже достаточно для покрытия цели
+    # Случай А: Накоплений уже достаточно
     if remaining_target <= 0.0:
         return {
             "target_amount": target_amount,
@@ -102,7 +325,7 @@ def calculate_savings_plan(
             "details": "У вас уже достаточно средств на счете для достижения этой цели прямо сейчас.",
         }
 
-    # Случай Б: Дефицит бюджета (расходы превышают или равны доходам)
+    # Случай Б: Дефицит бюджета
     if free_cash_flow <= 0.0:
         deficit = abs(free_cash_flow)
         months_fallback = target_months if (target_months and target_months > 0) else 12
@@ -110,7 +333,6 @@ def calculate_savings_plan(
         needed_discretionary_cut = round(
             ((deficit + required_savings) / discretionary_expenses * 100.0) if discretionary_expenses > 0 else 0.0, 1
         )
-
         return {
             "target_amount": target_amount,
             "current_savings": current_savings,
@@ -137,14 +359,12 @@ def calculate_savings_plan(
             ),
         }
 
-    # Случай В: Профицит бюджета. Расчет безопасных ежемесячных отчислений с учетом подушки
+    # Случай В: Профицит бюджета
     buffer_factor = max(0.0, 1.0 - (risk_buffer_percent / 100.0))
     safe_monthly_savings = round(free_cash_flow * buffer_factor, 2)
-
-    # Расчетный срок при безопасном темпе накоплений
     estimated_months = math.ceil(remaining_target / safe_monthly_savings) if safe_monthly_savings > 0 else None
 
-    # Стресс-сценарий для студента с подработкой (во время сессии/экзаменов подработка падает на 40%)
+    # Стресс-сценарий (подработка падает на 40% в сессию)
     stress_variable_income = variable_income * 0.60
     stress_monthly_income = guaranteed_income + stress_variable_income
     stress_free_cash_flow = stress_monthly_income - monthly_expenses
@@ -154,11 +374,9 @@ def calculate_savings_plan(
     else:
         stress_scenario_months = None
 
-    # Если пользователь задал фиксированный желаемый срок
     if target_months and target_months > 0:
         required_monthly_savings = round(remaining_target / target_months, 2)
         is_achievable = safe_monthly_savings >= required_monthly_savings
-
         if is_achievable:
             recommended_cut = 0.0
             details = (
@@ -174,11 +392,10 @@ def calculate_savings_plan(
             details = (
                 f"При текущем уровне расходов за {target_months} мес. цель труднодостижима: "
                 f"нужно откладывать {required_monthly_savings:,.2f} руб./мес., а безопасный остаток — {safe_monthly_savings:,.2f} руб./мес. "
-                f"Необходимо сократить гибкие траты (кафе, развлечения) на {shortage_per_month:,.2f} руб./мес. ({recommended_cut}%) "
-                f"либо увеличить комфортный срок накопления до {estimated_months} мес."
+                f"Необходимо сократить гибкие траты на {shortage_per_month:,.2f} руб./мес. ({recommended_cut}%) "
+                f"либо увеличить срок до {estimated_months} мес."
             )
     else:
-        # Срок не задан — рассчитываем оптимальный срок на основе безопасного потока
         required_monthly_savings = safe_monthly_savings
         is_achievable = True
         recommended_cut = 0.0
@@ -223,8 +440,11 @@ SAVINGS_TOOL_DEFINITION = {
     "function": {
         "name": "calculate_savings_plan",
         "description": (
-            "Выполняет точный математический расчет финансового плана, бюджета и темпа накоплений на цель. "
-            "ОБЯЗАТЕЛЬНО используй этот инструмент для любых числовых вычислений. Запрещено считать сроки и отчисления самостоятельно!"
+            "Выполняет точный математический расчет финансового плана накопления на конкретную цель. "
+            "Вызывай этот инструмент ТОЛЬКО если пользователь хочет накопить деньги на определенную цель, "
+            "купить конкретную вещь или отложить определенную сумму (например: 'хочу накопить на ноутбук 60000 руб'). "
+            "НЕ вызывай этот инструмент для общих вопросов, аналитики трат, вопросов 'на чем сэкономить', "
+            "'какая самая большая трата', баланса или обычного общения — на них отвечай обычным текстом."
         ),
         "parameters": {
             "type": "object",
@@ -282,16 +502,11 @@ SAVINGS_TOOL_DEFINITION = {
 
 def summarize_user_finances(transactions: List[Transaction], current_balance: float) -> Dict[str, Any]:
     """
-    Анализирует транзакции студента с подработкой за месяц:
-    - Разделяет доходы на гарантированную стипендию и плавающую подработку;
-    - Выделяет обязательные регулярные платежи (подписки, транспорт, связь);
-    - Группирует гибкие расходы (кафе, фастфуд, покупки, развлечения);
-    - Находит крупные разовые транзакции (> 2000 руб.).
+    Анализирует транзакции студента с подработкой за месяц.
     """
     total_income = 0.0
     guaranteed_income = 0.0
     variable_income = 0.0
-
     total_expenses = 0.0
     regular_expenses = 0.0
     discretionary_expenses = 0.0
@@ -301,7 +516,6 @@ def summarize_user_finances(transactions: List[Transaction], current_balance: fl
     regular_payments: Dict[str, float] = {}
     large_transactions: List[Dict[str, Any]] = []
 
-    # Категории обязательных регулярных платежей студента
     regular_categories = {"Связь и подписки", "Транспорт", "Общежитие и быт"}
 
     for tx in transactions:
@@ -311,7 +525,6 @@ def summarize_user_finances(transactions: List[Transaction], current_balance: fl
         if tx.type == TransactionType.INCOME.value or tx.type == "income":
             total_income += amount
             income_by_category[category] = round(income_by_category.get(category, 0.0) + amount, 2)
-
             if "стипенди" in category.lower() or "стипенди" in (tx.description or "").lower():
                 guaranteed_income += amount
             else:
@@ -319,15 +532,11 @@ def summarize_user_finances(transactions: List[Transaction], current_balance: fl
         else:
             total_expenses += amount
             expenses_by_category[category] = round(expenses_by_category.get(category, 0.0) + amount, 2)
-
-            # Выделение регулярных обязательных платежей
             if category in regular_categories:
                 regular_expenses += amount
                 regular_payments[category] = round(regular_payments.get(category, 0.0) + amount, 2)
             else:
                 discretionary_expenses += amount
-
-            # Выделение крупных покупок (для студента от 1000 руб.)
             if amount >= 1000.0:
                 large_transactions.append({
                     "category": category,
@@ -343,7 +552,6 @@ def summarize_user_finances(transactions: List[Transaction], current_balance: fl
     regular_expenses = round(regular_expenses, 2)
     discretionary_expenses = round(discretionary_expenses, 2)
 
-    # Сортировка категорий расходов по убыванию суммы
     sorted_expenses = dict(sorted(expenses_by_category.items(), key=lambda item: item[1], reverse=True))
 
     return {
@@ -382,9 +590,8 @@ def build_system_prompt(finance_summary: Dict[str, Any]) -> str:
     regular_lines = [f"  - {cat}: {amount:,.2f} руб." for cat, amount in finance_summary["regular_payments"].items()]
     regular_text = "\n".join(regular_lines) if regular_lines else "  Нет регулярных платежей."
 
-    return f"""Ты — персональный финансовый ИИ-помощник Т-Банка для молодежи.
+    return f"""Ты — персональный финансовый ИИ-ассистент.
 Твой пользователь: студент 18-25 лет, совмещающий учебу в вузе и подработку (фриланс / смены).
-Его доходы состоят из гарантированной части (стипендия) и переменной (подработка). Во время сессии подработка может сокращаться.
 
 ФИНАНСОВЫЙ ПРОФИЛЬ СТУДЕНТА ЗА ПОСЛЕДНИЙ МЕСЯЦ:
 - Баланс карты: {balance:,.2f} руб.
@@ -392,20 +599,23 @@ def build_system_prompt(finance_summary: Dict[str, Any]) -> str:
   * Гарантированная стипендия: {guaranteed:,.2f} руб.
   * Доход от подработки / фриланса: {variable:,.2f} руб.
 - Общие месячные расходы: {expenses:,.2f} руб.
-  * Обязательные регулярные платежи (подписки, связь, транспорт): {regular:,.2f} руб.
-  * Гибкие расходы (кафе, фастфуд, развлечения, покупки): {discretionary:,.2f} руб.
+  * Обязательные регулярные платежи: {regular:,.2f} руб.
+  * Гибкие расходы (кафе, фастфуд, развлечения): {discretionary:,.2f} руб.
 - Структура расходов по категориям:
 {expenses_text}
 - Обязательные регулярные списания:
 {regular_text}
 - Свободный денежный поток: {cash_flow:,.2f} руб./мес.
 
-СТРОГИЕ ПРАВИЛА (ТРЕБОВАНИЯ КЕЙСА Т-БАНКА):
-1. ЗАПРЕЩЕНО выполнять расчеты сроков, сумм и процентов самостоятельно в тексте!
-2. Для любых математических расчетов ты ОБЯЗАН вызвать инструмент `calculate_savings_plan`, передав точные числа из профиля выше.
-3. Не давай индивидуальных инвестиционных рекомендаций (ИИР) и не принимай решения за пользователя.
-4. Отвечай дружелюбно, структурированно, без менторского тона, понятным для студента языком.
-5. Обязательно дай конкретный пошаговый план (3-4 действия), как студенту легче откладывать деньги (автонакопления в день выплаты стипендии/смены, контроль импульсивных трат на кофе/фастфуд).
+СТРОГИЕ ПРАВИЛА:
+1. Инструмент `calculate_savings_plan` предназначен ИСКЛЮЧИТЕЛЬНО для точного расчета плана накоплений на конкретную финансовую цель (когда пользователь хочет накопить, купить вещь или отложить конкретную сумму, например: «хочу накопить на ноутбук 60 000 ₽»).
+2. Если пользователь задает аналитический вопрос по своим расходам («Какая самая большая трата за последний месяц?», «На чем я могу сэкономить?», «Какой у меня баланс?», «Сколько уходит на кафе?»), отвечай структурированным текстом на основе данных из финансового профиля выше. В таких случаях ЗАПРЕЩЕНО вызывать инструмент `calculate_savings_plan`!
+3. Для расчетов по цели накоплений ЗАПРЕЩЕНО считать в уме — ОБЯЗАТЕЛЬНО вызывай инструмент `calculate_savings_plan`.
+4. Не давай индивидуальных инвестиционных рекомендаций (ИИР) и не принимай решения за пользователя.
+5. Отвечай дружелюбно, структурированно, понятным для студента языком.
+6. Если запрос НЕ связан с финансами (болтовня, код, учеба) — вежливо скажи, что ты финансовый помощник, и перечисли свои возможности. НЕ вызывай инструмент.
+7. Если указана иностранная валюта — объясни, что сервис работает только с рублями.
+8. Если запрос об инвестициях, кредитах, ипотеке — объясни ограничения и перенаправь.
 """
 
 
@@ -413,13 +623,13 @@ def build_system_prompt(finance_summary: Dict[str, Any]) -> str:
 # 4. Резервный парсер запроса пользователя
 # =====================================================================
 
-def fallback_extract_target(user_query: str) -> Tuple[str, float, Optional[int]]:
+def fallback_extract_target(user_query: str) -> Tuple[Optional[str], Optional[float], Optional[int]]:
     """
     Резервный анализатор запроса с помощью регулярных выражений.
-    Гарантирует стабильную работу MVP бэкенда на демо хакатона.
+    Извлекает сумму и срок ТОЛЬКО если они явно присутствуют в запросе.
+    Никаких сумм по умолчанию (50 000 и т.д.) здесь нет!
     """
-    # Поиск суммы (например: 150000, 150 000, 120k, 50 тыс. руб.)
-    amount = 50000.0
+    amount = None
     amount_match = re.search(r"(\d+(?:[\s_]\d+)*)\s*(тыс(?:\.|яч[ей|и]?)?|k|к|руб(?:лей|\.)?|р\b)?", user_query, re.IGNORECASE)
     if amount_match:
         raw_num = re.sub(r"[\s_]+", "", amount_match.group(1))
@@ -433,7 +643,6 @@ def fallback_extract_target(user_query: str) -> Tuple[str, float, Optional[int]]
         except ValueError:
             pass
 
-    # Поиск срока в месяцах
     months = None
     month_match = re.search(r"(\d+)\s*(?:мес|месяц|месяца|месяцев)", user_query, re.IGNORECASE)
     if month_match:
@@ -446,13 +655,15 @@ def fallback_extract_target(user_query: str) -> Tuple[str, float, Optional[int]]
     elif "полгода" in user_query.lower():
         months = 6
 
-    # Название цели (отсекаем стоп-слова)
-    title = user_query.strip()
-    clean_title = re.sub(r"(хочу накопить на|накопить на|купить|собрать на)\s*", "", title, flags=re.IGNORECASE).strip()
-    if clean_title:
-        title = clean_title.capitalize()
-    if len(title) > 60:
-        title = title[:57] + "..."
+    # Название цели извлекаем только если пользователь действительно формулирует цель накопления
+    title = None
+    goal_match = re.search(r"(хочу накопить на|накопить на|собрать на|купить|отложить на)\s*([^\d,\.]+)", user_query, re.IGNORECASE)
+    if goal_match:
+        extracted_t = goal_match.group(2).strip()
+        if extracted_t:
+            title = extracted_t.capitalize()
+            if len(title) > 60:
+                title = title[:57] + "..."
 
     return title, amount, months
 
@@ -468,12 +679,68 @@ async def process_ai_financial_advice(
 ) -> Dict[str, Any]:
     """
     Основная логика ИИ-модуля для кейса Т-Банка:
-    1. Формирует профиль студента с подработкой из транзакций.
-    2. Передает контекст и запрос в LLM (ProxyAPI / OpenAI).
-    3. Принимает вызов Tool Calling, исполняет python-функцию calculate_savings_plan.
-    4. Генерирует план действий (Action Items), ограничения и ссылки на проверенные источники.
+    0. Классифицирует запрос (финансовый / нерелевантный / рискованный).
+    1. Для нерелевантных — возвращает лёгкий ответ без расчётов.
+    2. Для рискованных — обозначает ограничения без вызова Tool Calling.
+    3. Для финансовых — полный пайплайн: профиль → LLM → Tool Calling → план.
     """
+    # Шаг 0: Классификация запроса
+    classification = classify_query(user_query)
+    query_type = classification["type"]
+
+    # Базовая финансовая сводка (нужна для полей user_balance и т.п.)
     finance_summary = summarize_user_finances(transactions, user_balance)
+
+    # --- НЕРЕЛЕВАНТНЫЙ ЗАПРОС (болтовня, программирование, прочее) ---
+    if query_type == "off_topic":
+        print(f"Классификация запроса: OFF_TOPIC — «{user_query[:50]}...»")
+        advice_text = build_off_topic_response(user_query)
+        return {
+            "advice": advice_text,
+            "calculation": None,
+            "user_balance": finance_summary["current_balance"],
+            "monthly_income": finance_summary["total_income"],
+            "monthly_expenses": finance_summary["total_expenses"],
+            "top_expense_categories": finance_summary["expenses_by_category"],
+            "regular_payments": finance_summary.get("regular_payments", {}),
+            "large_transactions": [],
+            "action_items": [],
+            "limitations": (
+                "⚠️ Ограничения сервиса: Я — финансовый ИИ-помощник и могу отвечать "
+                "только на вопросы, связанные с бюджетом, накоплениями и расходами студента. "
+                "Вопросы по программированию, учёбе и другим темам — вне моей компетенции."
+            ),
+            "disclaimer": SERVICE_DISCLAIMER,
+            "sources": [],
+            "extracted_goal": None,
+        }
+
+    # --- РИСКОВАННЫЙ ЗАПРОС (иностранная валюта, инвестиции, кредиты, азарт) ---
+    if query_type == "risky":
+        print(f"Классификация запроса: RISKY ({classification['reason']}) — «{user_query[:50]}...»")
+        advice_text = build_risky_response(classification["reason"], classification.get("details"))
+        return {
+            "advice": advice_text,
+            "calculation": None,
+            "user_balance": finance_summary["current_balance"],
+            "monthly_income": finance_summary["total_income"],
+            "monthly_expenses": finance_summary["total_expenses"],
+            "top_expense_categories": finance_summary["expenses_by_category"],
+            "regular_payments": finance_summary.get("regular_payments", {}),
+            "large_transactions": [],
+            "action_items": [],
+            "limitations": (
+                f"⚠️ Ограничения сервиса: Запрос классифицирован как «{classification['reason']}». "
+                f"Сервис работает только с рублёвыми целями накоплений для студентов. "
+                f"Не даём инвестиционных рекомендаций, не консультируем по кредитам и займам."
+            ),
+            "disclaimer": SERVICE_DISCLAIMER,
+            "sources": [],
+            "extracted_goal": None,
+        }
+
+    # --- ФИНАНСОВЫЙ ЗАПРОС: полный пайплайн с Tool Calling ---
+    print(f"Классификация запроса: FINANCIAL — «{user_query[:50]}...»")
     system_prompt = build_system_prompt(finance_summary)
 
     client = AsyncOpenAI(
@@ -512,28 +779,29 @@ async def process_ai_financial_advice(
             for tool_call in response_message.tool_calls:
                 if tool_call.function.name == "calculate_savings_plan":
                     tool_args = json.loads(tool_call.function.arguments)
+                    raw_target = tool_args.get("target_amount") or extracted_amount
 
-                    # ВЫЗОВ ТОЧНОЙ PYTHON-ФУНКЦИИ
-                    calculation_result = calculate_savings_plan(
-                        target_amount=float(tool_args.get("target_amount", extracted_amount)),
-                        monthly_income=float(tool_args.get("monthly_income", finance_summary["total_income"])),
-                        monthly_expenses=float(tool_args.get("monthly_expenses", finance_summary["total_expenses"])),
-                        guaranteed_income=float(tool_args.get("guaranteed_income", finance_summary["guaranteed_income"])),
-                        variable_income=float(tool_args.get("variable_income", finance_summary["variable_income"])),
-                        regular_expenses=float(tool_args.get("regular_expenses", finance_summary["regular_expenses"])),
-                        discretionary_expenses=float(tool_args.get("discretionary_expenses", finance_summary["discretionary_expenses"])),
-                        current_savings=float(tool_args.get("current_savings", 0.0)),
-                        target_months=tool_args.get("target_months") or extracted_months,
-                        risk_buffer_percent=float(tool_args.get("risk_buffer_percent", 10.0)),
-                    )
+                    if raw_target and float(raw_target) > 0:
+                        calculation_result = calculate_savings_plan(
+                            target_amount=float(raw_target),
+                            monthly_income=float(tool_args.get("monthly_income", finance_summary["total_income"])),
+                            monthly_expenses=float(tool_args.get("monthly_expenses", finance_summary["total_expenses"])),
+                            guaranteed_income=float(tool_args.get("guaranteed_income", finance_summary["guaranteed_income"])),
+                            variable_income=float(tool_args.get("variable_income", finance_summary["variable_income"])),
+                            regular_expenses=float(tool_args.get("regular_expenses", finance_summary["regular_expenses"])),
+                            discretionary_expenses=float(tool_args.get("discretionary_expenses", finance_summary["discretionary_expenses"])),
+                            current_savings=float(tool_args.get("current_savings", 0.0)),
+                            target_months=tool_args.get("target_months") or extracted_months,
+                            risk_buffer_percent=float(tool_args.get("risk_buffer_percent", 10.0)),
+                        )
 
-                    messages.append({
-                        "role": "tool",
-                        "tool_call_id": tool_call.id,
-                        "content": json.dumps(calculation_result, ensure_ascii=False),
-                    })
+                        messages.append({
+                            "role": "tool",
+                            "tool_call_id": tool_call.id,
+                            "content": json.dumps(calculation_result, ensure_ascii=False),
+                        })
 
-            # Шаг 3: Получение финального ответа от модели
+            # Шаг 3: Финальный ответ модели
             second_response = await client.chat.completions.create(
                 model=OPENAI_MODEL,
                 messages=messages,
@@ -541,7 +809,23 @@ async def process_ai_financial_advice(
             )
             ai_advice_text = second_response.choices[0].message.content or ""
         else:
+            # LLM не вызвал Tool Calling — запрос не требует расчёта
+            # (аналитический вопрос, общий финансовый вопрос, вопрос о тратах и т.п.)
             ai_advice_text = response_message.content or ""
+            calculation_result = None
+            print("LLM ответил без Tool Calling — расчёт накоплений не требуется.")
+
+    except Exception as exc:
+        print(f"Обработка запроса через резервный локальный движок (причина: {exc})")
+
+        # Пытаемся определить: запрос требует расчёт накопления или это аналитический вопрос?
+        savings_markers = re.search(
+            r"(накопить|копить|отложить|собрать|откладывать|сколько.*откладывать|хочу\s+купить)",
+            user_query, re.IGNORECASE
+        )
+
+        if savings_markers and extracted_amount and extracted_amount > 0:
+            # Запрос про конкретное накопление — делаем резервный расчёт
             calculation_result = calculate_savings_plan(
                 target_amount=extracted_amount,
                 monthly_income=finance_summary["total_income"],
@@ -554,61 +838,75 @@ async def process_ai_financial_advice(
                 target_months=extracted_months,
             )
 
-    except Exception as exc:
-        print(f"Обработка запроса через резервный локальный движок (причина: {exc})")
-        calculation_result = calculate_savings_plan(
-            target_amount=extracted_amount,
-            monthly_income=finance_summary["total_income"],
-            monthly_expenses=finance_summary["total_expenses"],
-            guaranteed_income=finance_summary["guaranteed_income"],
-            variable_income=finance_summary["variable_income"],
-            regular_expenses=finance_summary["regular_expenses"],
-            discretionary_expenses=finance_summary["discretionary_expenses"],
-            current_savings=0.0,
-            target_months=extracted_months,
-        )
+            top_cats = list(finance_summary["expenses_by_category"].items())[:3]
+            top_cats_text = ", ".join([f"{c} ({a:,.0f} руб.)" for c, a in top_cats]) if top_cats else "отсутствуют"
 
-        top_cats = list(finance_summary["expenses_by_category"].items())[:3]
-        top_cats_text = ", ".join([f"{c} ({a:,.0f} руб.)" for c, a in top_cats]) if top_cats else "отсутствуют"
+            if calculation_result["is_achievable"]:
+                months_text = f"{calculation_result['estimated_months']} мес." if calculation_result['estimated_months'] else "12 мес."
+                stress_info = ""
+                if calculation_result.get("stress_scenario_months"):
+                    stress_info = f"\n- В период сессии (при спаде подработки на 40%): **{calculation_result['stress_scenario_months']} мес.**"
 
-        if calculation_result["is_achievable"]:
-            months_text = f"{calculation_result['estimated_months']} мес." if calculation_result['estimated_months'] else "12 мес."
-            stress_info = ""
-            if calculation_result.get("stress_scenario_months"):
-                stress_info = f"\n- В период сессии (при спаде подработки на 40%): **{calculation_result['stress_scenario_months']} мес.**"
-
-            ai_advice_text = (
-                f"🎯 **Финансовый план накопления для студента**\n\n"
-                f"Цель: **{goal_title}** на сумму **{calculation_result['target_amount']:,.2f} руб.**\n\n"
-                f"📊 **Точный расчет бюджета:**\n"
-                f"- Общий доход: {calculation_result['monthly_income']:,.2f} руб. (стипендия: {calculation_result['guaranteed_income']:,.2f} руб., подработка: {calculation_result['variable_income']:,.2f} руб.)\n"
-                f"- Обязательные регулярные платежи: {calculation_result['regular_expenses']:,.2f} руб.\n"
-                f"- Гибкие расходы (кафе, фастфуд, покупки): {calculation_result['discretionary_expenses']:,.2f} руб.\n"
-                f"- Свободный остаток: {calculation_result['free_cash_flow']:,.2f} руб./мес.\n"
-                f"- Рекомендуемый темп: **{calculation_result['required_monthly_savings']:,.2f} руб./мес.** (~{calculation_result['daily_savings_recommendation']:,.2f} руб./день)\n"
-                f"- Срок достижения цели (базовый темп): **{months_text}**{stress_info}\n\n"
-                f"💡 **Рекомендации по оптимизации для студента:**\n"
-                f"Ваши основные категории гибких трат: {top_cats_text}. "
-                f"Если сократить походы в кофейни и доставку еды хотя бы на 10-15%, вы сможете создать неприкосновенную подушку безопасности "
-                f"и достичь цели даже в период сессии!"
-            )
+                ai_advice_text = (
+                    f"🎯 **Финансовый план накопления для студента**\n\n"
+                    f"Цель: **{goal_title or 'Накопление'}** на сумму **{calculation_result['target_amount']:,.2f} руб.**\n\n"
+                    f"📊 **Точный расчет бюджета:**\n"
+                    f"- Свободный остаток: {calculation_result['free_cash_flow']:,.2f} руб./мес.\n"
+                    f"- Рекомендуемый темп: **{calculation_result['required_monthly_savings']:,.2f} руб./мес.** (~{calculation_result['daily_savings_recommendation']:,.2f} руб./день)\n"
+                    f"- Срок достижения цели: **{months_text}**{stress_info}\n\n"
+                    f"💡 **Рекомендации:**\n"
+                    f"Основные гибкие траты: {top_cats_text}. "
+                    f"Сократив их на 10-15%, вы создадите подушку безопасности и достигнете цели даже в сессию!"
+                )
+            else:
+                ai_advice_text = (
+                    f"⚠️ **Анализ бюджета выявил дефицит свободных средств**\n\n"
+                    f"Цель: **{goal_title or 'Накопление'}** на сумму **{calculation_result['target_amount']:,.2f} руб.**\n\n"
+                    f"Текущие расходы ({calculation_result['monthly_expenses']:,.2f} руб.) превышают доход ({calculation_result['monthly_income']:,.2f} руб.).\n"
+                    f"Необходимо сократить гибкие расходы на {calculation_result['recommended_cut_percentage']}%."
+                )
         else:
+            # Аналитический или общий финансовый вопрос — отвечаем без расчёта
+            calculation_result = None
+            top_cats = list(finance_summary["expenses_by_category"].items())[:3]
+            top_cats_text = ", ".join([f"{c} ({a:,.0f} руб.)" for c, a in top_cats]) if top_cats else "нет данных"
+
+            large = finance_summary.get("large_transactions", [])
+            largest_text = ""
+            if large:
+                lg = large[0]
+                largest_text = f"Самая крупная трата: {lg['description']} — {lg['amount']:,.2f} руб. ({lg['category']}, {lg['date']}).\n"
+
             ai_advice_text = (
-                f"⚠️ **Анализ бюджета выявил дефицит свободных средств**\n\n"
-                f"Цель: **{goal_title}** на сумму **{calculation_result['target_amount']:,.2f} руб.**\n\n"
-                f"Текущие расходы ({calculation_result['monthly_expenses']:,.2f} руб.) почти полностью съедают доход ({calculation_result['monthly_income']:,.2f} руб.).\n"
-                f"Чтобы откладывать {calculation_result['required_monthly_savings']:,.2f} руб./мес., "
-                f"необходимо сократить категорию гибких расходов ({calculation_result['discretionary_expenses']:,.2f} руб.) "
-                f"на {calculation_result['recommended_cut_percentage']}%."
+                f"📊 **Финансовая сводка за месяц**\n\n"
+                f"- Баланс: {finance_summary['current_balance']:,.2f} руб.\n"
+                f"- Доходы: {finance_summary['total_income']:,.2f} руб.\n"
+                f"- Расходы: {finance_summary['total_expenses']:,.2f} руб.\n"
+                f"- Свободный остаток: {finance_summary['free_cash_flow']:,.2f} руб./мес.\n\n"
+                f"Топ категорий расходов: {top_cats_text}.\n"
+                f"{largest_text}\n"
+                f"Если хочешь рассчитать план накопления на покупку, укажи сумму и желаемый срок!"
             )
 
-    # Формируем конкретные шаги для студента (Action items)
-    action_items = [
-        f"Настроить автоперевод в копилку: сразу переводить {calculation_result['required_monthly_savings']/2:,.0f} руб. в день стипендии и в день зарплаты за подработку.",
-        "Установить недельный лимит на кафе и доставку готовой еды в мобильном приложении банка.",
-        "Проверить список платных подписок и отключить те сервисы, которыми редко пользуетесь во время учебы.",
-        "Не трогать резервную подушку безопасности (10% от свободных денег), чтобы не залезать в долги в сессию.",
-    ]
+    # Формируем конкретные шаги только если был расчет финансовой цели
+    action_items = []
+    if calculation_result and calculation_result.get("required_monthly_savings", 0) > 0:
+        monthly_save = calculation_result["required_monthly_savings"]
+        action_items = [
+            f"Настроить автоперевод в копилку: переводить {monthly_save / 2:,.0f} руб. в день стипендии и в день зарплаты.",
+            "Установить недельный лимит на кафе и доставку еды в приложении банка.",
+            "Проверить платные подписки и отключить неиспользуемые.",
+            "Не трогать подушку безопасности (10% от свободных средств) на случай сессии.",
+        ]
+
+    # Данные для сохранения цели в БД формируются только если цель реально рассчитывалась
+    extracted_goal_info = None
+    if calculation_result and calculation_result.get("target_amount", 0) > 0:
+        extracted_goal_info = {
+            "title": goal_title or "Финансовая цель",
+            "target_amount": calculation_result["target_amount"],
+            "target_months": calculation_result.get("estimated_months") or extracted_months,
+        }
 
     return {
         "advice": ai_advice_text,
@@ -620,12 +918,8 @@ async def process_ai_financial_advice(
         "regular_payments": finance_summary["regular_payments"],
         "large_transactions": finance_summary["large_transactions"],
         "action_items": action_items,
-        "limitations": SERVICE_LIMITATIONS,
+        "limitations": SERVICE_LIMITATIONS if calculation_result else "",
         "disclaimer": SERVICE_DISCLAIMER,
-        "sources": TRUSTED_FINANCIAL_SOURCES,
-        "extracted_goal": {
-            "title": goal_title,
-            "target_amount": calculation_result["target_amount"] if calculation_result else extracted_amount,
-            "target_months": calculation_result.get("estimated_months") if calculation_result else extracted_months,
-        },
+        "sources": TRUSTED_FINANCIAL_SOURCES if calculation_result else [],
+        "extracted_goal": extracted_goal_info,
     }

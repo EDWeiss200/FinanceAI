@@ -249,18 +249,20 @@ html, body, #root {
 
 /* 3. Чат справа */
 .chat-container {
-  width: 650px;
+  width: 620px;
   height: calc(100vh - 54px);
   margin-top: 27px;
   margin-bottom: 27px;
   margin-right: 29px;
-  background-color: #f0e7da;
-  border-radius: 70px;
-  padding: 40px;
+  background-color: #f7f3ed;
+  border: 1px solid rgba(0, 0, 0, 0.05);
+  border-radius: 36px;
+  padding: 24px 26px;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
   flex-shrink: 0;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.12);
 }
 
 .chat-body {

@@ -1,12 +1,12 @@
 import React, { useState, useEffect, useRef } from "react";
 import "./ChatAssistant.css";
 
-// Быстрые подсказки для студента
+// Быстрые подсказки
 const QUICK_PROMPTS = [
   "🎯 Накопить 60 000 ₽ на ноутбук за 6 месяцев",
   "📱 Хочу накопить на новый смартфон за 30 000 ₽",
-  "🍕 Как сократить траты на фастфуд и столовую?",
-  "⚠️ Хватит ли мне денег в период сессии?",
+  "🍕 Как сократить траты на фастфуд и кафе?",
+  "📊 Какая самая большая трата за последний месяц?",
 ];
 
 export default function ChatAssistant() {
@@ -14,7 +14,7 @@ export default function ChatAssistant() {
     {
       id: "welcome-1",
       sender: "assistant",
-      text: "👋 Привет! Я твой персональный финансовый ИИ-помощник Т-Банка.\n\nЯ уже знаю структуру твоих доходов (стипендию и подработку) и реальные расходы. Напиши, на что и какую сумму ты хочешь накопить, и я сделаю точный математический расчет с учетом подушки безопасности и возможного спада подработки в сессию!",
+      text: "👋 Привет! Я твой персональный финансовый ИИ-ассистент.\n\nЯ помогу проанализировать твои доходы и расходы, спланировать бюджет или рассчитать точный математический план накоплений на любую цель. Напиши свой вопрос или сумму цели!",
       timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
     },
   ]);
@@ -123,11 +123,13 @@ export default function ChatAssistant() {
       {/* Шапка чата */}
       <div className="chat-header">
         <div className="chat-header-info">
-          <div className="chat-avatar">🤖</div>
-          <div>
-            <div className="chat-title">Т-Помощник</div>
+          <div className="chat-avatar">
+            <span className="avatar-icon">✨</span>
+          </div>
+          <div className="chat-title-block">
+            <div className="chat-title">Финансовый ассистент</div>
             <div className="chat-status">
-              <span className="status-dot"></span> Студент с подработкой
+              <span className="status-dot pulse"></span> Онлайн
             </div>
           </div>
         </div>
@@ -136,7 +138,7 @@ export default function ChatAssistant() {
           onClick={handleClearHistory}
           title="Очистить историю диалога"
         >
-          🔄 Очистить
+          <span className="clear-icon">🗑️</span> Очистить
         </button>
       </div>
 
