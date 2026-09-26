@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import "./App.css";
+import ChatAssistant from "./ChatAssistant";
 
 const MONTHS = [
   "Январь",
@@ -237,13 +238,8 @@ export default function App() {
         </section>
       </main>
 
-      {/* Чат */}
-      <aside className="chat-container">
-        <div className="chat-body">
-          <span>тут будет чат</span>
-        </div>
-        <div className="chat-input-bar"></div>
-      </aside>
+      {/* Чат с финансовым ИИ-помощником */}
+      <ChatAssistant />
 
       {/* Модальное окно создания */}
       {isModalOpen && (

@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select, desc
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from auth.auth import current_user
+from auth.auth import current_user, optional_current_user
 from database.database import get_async_session
 from models.models import User, Transaction, Goal
 from schemas.schemas import (
@@ -21,6 +21,29 @@ from schemas.schemas import (
 from utils.Ai_utils import process_ai_financial_advice
 
 
+async def get_current_or_guest_user(
+    user: Optional[User] = Depends(optional_current_user),
+    session: AsyncSession = Depends(get_async_session),
+) -> User:
+    """
+    Возвращает авторизованного пользователя. Если фронтенд пока не отправляет токен
+    (страница авторизации в разработке), берет профиль первого студента из PostgreSQL.
+    """
+    if user is not None:
+        return user
+
+    stmt = select(User).order_by(User.id.asc()).limit(1)
+    res = await session.execute(stmt)
+    default_user = res.scalar_one_or_none()
+    if default_user:
+        return default_user
+
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Пользователь не найден. Зарегистрируйте аккаунт через /auth/register.",
+    )
+
+
 router = APIRouter(
     tags=["Пользователь и Финансовый ИИ"],
     prefix="/users",
@@ -29,7 +52,7 @@ router = APIRouter(
 
 @router.get("/me", response_model=UserReadSchema, summary="Получить профиль текущего пользователя с балансом")
 async def get_current_user_profile(
-    user: User = Depends(current_user),
+    user: User = Depends(get_current_or_guest_user),
 ):
     """Возвращает информацию о текущем авторизованном пользователе и его балансе."""
     return UserReadSchema(
@@ -46,7 +69,7 @@ async def get_current_user_profile(
     summary="Получить список транзакций (песочница доходов и расходов)",
 )
 async def get_user_transactions(
-    user: User = Depends(current_user),
+    user: User = Depends(get_current_or_guest_user),
     session: AsyncSession = Depends(get_async_session),
     tx_type: Optional[str] = Query(None, description="Фильтр по типу: 'income' или 'expense'"),
 ):
@@ -78,7 +101,7 @@ async def get_user_transactions(
     include_in_schema=False,
 )
 async def get_categories_summary(
-    user: User = Depends(current_user),
+    user: User = Depends(get_current_or_guest_user),
     session: AsyncSession = Depends(get_async_session),
     sort_by: str = Query(
         "amount_desc",
@@ -179,7 +202,7 @@ async def get_categories_summary(
     summary="Получить финансовые цели пользователя",
 )
 async def get_user_goals(
-    user: User = Depends(current_user),
+    user: User = Depends(get_current_or_guest_user),
     session: AsyncSession = Depends(get_async_session),
 ):
     """Возвращает список всех финансовых целей текущего пользователя."""
@@ -197,7 +220,7 @@ async def get_user_goals(
 )
 async def create_goal(
     goal_data: GoalCreateSchema,
-    user: User = Depends(current_user),
+    user: User = Depends(get_current_or_guest_user),
     session: AsyncSession = Depends(get_async_session),
 ):
     """Создает новую финансовую цель для пользователя."""
@@ -221,7 +244,7 @@ async def create_goal(
 )
 async def ask_financial_advisor(
     request: AIAdvisorRequest,
-    user: User = Depends(current_user),
+    user: User = Depends(get_current_or_guest_user),
     session: AsyncSession = Depends(get_async_session),
 ):
     """
@@ -288,7 +311,7 @@ async def ask_financial_advisor(
 # Эндпоинт для совместимости с предыдущим маршрутом
 @router.get("", response_model=UserReadSchema, include_in_schema=False)
 async def get_info_user_alias(
-    user: User = Depends(current_user),
+    user: User = Depends(get_current_or_guest_user),
 ):
     """Псевдоним для получения профиля текущего пользователя."""
     return UserReadSchema(

@@ -55,3 +55,6 @@ password_helper = PasswordHelper(password_hash)
 
 # Зависимость для получения текущего авторизованного пользователя
 current_user = fastapi_users.current_user()
+
+# Опциональная авторизация (для бесшовной разработки фронтенда без логина)
+optional_current_user = fastapi_users.current_user(optional=True)
