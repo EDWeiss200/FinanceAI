@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
+import { useAuth } from "../../context/AuthContext";
 import "./ChatAssistant.css";
 
 // Быстрые подсказки
@@ -9,7 +10,8 @@ const QUICK_PROMPTS = [
   "📊 Какая самая большая трата за последний месяц?",
 ];
 
-export default function ChatAssistant() {
+export default function ChatAssistant({ onGoalCreated }) {
+  const { token, logout } = useAuth();
   const [messages, setMessages] = useState([
     {
       id: "welcome-1",
@@ -49,8 +51,6 @@ export default function ChatAssistant() {
     setIsLoading(true);
 
     try {
-      // Получаем токен, если он сохранен в localStorage, иначе запрос уйдет в dev-режиме
-      const token = localStorage.getItem("access_token");
       const headers = {
         "Content-Type": "application/json",
       };
@@ -67,11 +67,26 @@ export default function ChatAssistant() {
         }),
       });
 
+      if (response.status === 401) {
+        logout();
+        return;
+      }
+
       if (!response.ok) {
         throw new Error(`Ошибка сервера (${response.status})`);
       }
 
       const data = await response.json();
+
+      // Оповещаем родительский дашборд о создании новой финансовой цели
+      if (data.goal_created) {
+        if (typeof onGoalCreated === "function") {
+          onGoalCreated(data.goal_created);
+        }
+        window.dispatchEvent(
+          new CustomEvent("finance_goal_created", { detail: data.goal_created })
+        );
+      }
 
       const assistantMessage = {
         id: "ai-" + Date.now(),
@@ -203,7 +218,7 @@ export default function ChatAssistant() {
                       </div>
                       {msg.calculation.stress_scenario_months && (
                         <div className="metric-sub stress">
-                          в сессию: {msg.calculation.stress_scenario_months} мес.
+                          при спаде дохода: {msg.calculation.stress_scenario_months} мес.
                         </div>
                       )}
                     </div>

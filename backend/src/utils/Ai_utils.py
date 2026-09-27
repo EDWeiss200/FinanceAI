@@ -24,9 +24,9 @@ SERVICE_DISCLAIMER = (
 )
 
 SERVICE_LIMITATIONS = (
-    "Ограничения расчетов: Математический прогноз построен на основе данных о доходах и расходах за последние 30 дней "
+    "Ограничения расчетов: Математический прогноз построен на основе фактических среднемесячных доходов и расходов "
     "и предполагает сохранение текущего темпа заработка. Не учитывает внезапные форс-мажоры и крупные непредсказуемые траты. "
-    "Для студентов с нестабильной подработкой рекомендуется ориентироваться на консервативный сценарий (с учетом спада в сессию)."
+    "При наличии рисков падения доходов рекомендуется формировать резервную подушку безопасности."
 )
 
 
@@ -281,10 +281,12 @@ def calculate_savings_plan(
     current_savings: float = 0.0,
     target_months: Optional[int] = None,
     risk_buffer_percent: float = 10.0,
+    include_stress_scenario: bool = False,
 ) -> Dict[str, Any]:
     """
     Выполняет строгий математический расчет бюджета и темпа накоплений для студента с подработкой.
     Нейросеть не считает в уме — расчеты полностью детерминированы кодом (требование Т-Банка).
+    Стресс-сценарий (спад подработки на 40%) рассчитывается ТОЛЬКО если пользователь сам указал трудности.
     """
     target_amount = float(target_amount)
     monthly_income = float(monthly_income)
@@ -316,7 +318,7 @@ def calculate_savings_plan(
             "safe_monthly_savings": 0.0,
             "required_monthly_savings": 0.0,
             "estimated_months": 0,
-            "stress_scenario_months": 0,
+            "stress_scenario_months": None,
             "is_achievable": True,
             "daily_savings_recommendation": 0.0,
             "weekly_savings_recommendation": 0.0,
@@ -364,13 +366,15 @@ def calculate_savings_plan(
     safe_monthly_savings = round(free_cash_flow * buffer_factor, 2)
     estimated_months = math.ceil(remaining_target / safe_monthly_savings) if safe_monthly_savings > 0 else None
 
-    # Стресс-сценарий (подработка падает на 40% в сессию)
-    stress_variable_income = variable_income * 0.60
-    stress_monthly_income = guaranteed_income + stress_variable_income
-    stress_free_cash_flow = stress_monthly_income - monthly_expenses
-    if stress_free_cash_flow > 0:
-        stress_safe_savings = stress_free_cash_flow * buffer_factor
-        stress_scenario_months = math.ceil(remaining_target / stress_safe_savings) if stress_safe_savings > 0 else None
+    # Стресс-сценарий (рассчитывается ТОЛЬКО если пользователь сам прямо спросил о трудностях/сессии/спаде дохода)
+    stress_scenario_months = None
+    if include_stress_scenario and variable_income > 0:
+        stress_variable_income = variable_income * 0.60
+        stress_monthly_income = guaranteed_income + stress_variable_income
+        stress_free_cash_flow = stress_monthly_income - monthly_expenses
+        if stress_free_cash_flow > 0:
+            stress_safe_savings = stress_free_cash_flow * buffer_factor
+            stress_scenario_months = math.ceil(remaining_target / stress_safe_savings) if stress_safe_savings > 0 else None
     else:
         stress_scenario_months = None
 
@@ -479,7 +483,7 @@ SAVINGS_TOOL_DEFINITION = {
                 },
                 "current_savings": {
                     "type": "number",
-                    "description": "Текущий баланс или стартовые сбережения пользователя (по умолчанию 0)",
+                    "description": "Стартовые накопления, выделенные на цель, ТОЛЬКО если пользователь прямо указал их в тексте запроса (например: 'у меня уже есть 10 000 ₽'). Если пользователь не назвал сумму стартовых накоплений, передавай 0.0, так как текущий баланс карты нужен студенту для повседневной жизни (питание, общежитие, транспорт)!",
                 },
                 "target_months": {
                     "type": "integer",
@@ -488,6 +492,10 @@ SAVINGS_TOOL_DEFINITION = {
                 "risk_buffer_percent": {
                     "type": "number",
                     "description": "Процент подушки безопасности/непредвиденных расходов (по умолчанию 10)",
+                },
+                "include_stress_scenario": {
+                    "type": "boolean",
+                    "description": "Устанавливай True ТОЛЬКО если пользователь прямо спросил про сессию, экзамены, возможные трудности или спад заработка. Если об этом не спрашивалось, передавай False.",
                 },
             },
             "required": ["target_amount", "monthly_income", "monthly_expenses"],
@@ -502,14 +510,41 @@ SAVINGS_TOOL_DEFINITION = {
 
 def summarize_user_finances(transactions: List[Transaction], current_balance: float) -> Dict[str, Any]:
     """
-    Анализирует транзакции студента с подработкой за месяц.
+    Анализирует историю транзакций студента и вычисляет корректные СРЕДНЕМЕСЯЧНЫЕ показатели:
+    - Определяет количество уникальных месяцев в выборке (например: июль, август, сентябрь = 3 месяца);
+    - Делит накопленные суммы доходов и расходов на количество месяцев;
+    - Это предотвращает искажение ежемесячного бюджета при наличии истории за несколько месяцев.
     """
-    total_income = 0.0
-    guaranteed_income = 0.0
-    variable_income = 0.0
-    total_expenses = 0.0
-    regular_expenses = 0.0
-    discretionary_expenses = 0.0
+    if not transactions:
+        return {
+            "current_balance": round(current_balance, 2),
+            "total_income": 0.0,
+            "guaranteed_income": 0.0,
+            "variable_income": 0.0,
+            "total_expenses": 0.0,
+            "regular_expenses": 0.0,
+            "discretionary_expenses": 0.0,
+            "income_by_category": {},
+            "expenses_by_category": {},
+            "regular_payments": {},
+            "large_transactions": [],
+            "free_cash_flow": 0.0,
+            "months_analyzed": 1,
+        }
+
+    # 1. Определяем уникальные календарные месяцы в выборке транзакций
+    months_set = set()
+    for tx in transactions:
+        if tx.transaction_date:
+            months_set.add((tx.transaction_date.year, tx.transaction_date.month))
+    months_count = max(1, len(months_set))
+
+    total_income_sum = 0.0
+    guaranteed_income_sum = 0.0
+    variable_income_sum = 0.0
+    total_expenses_sum = 0.0
+    regular_expenses_sum = 0.0
+    discretionary_expenses_sum = 0.0
 
     income_by_category: Dict[str, float] = {}
     expenses_by_category: Dict[str, float] = {}
@@ -518,55 +553,84 @@ def summarize_user_finances(transactions: List[Transaction], current_balance: fl
 
     regular_categories = {"Связь и подписки", "Транспорт", "Общежитие и быт"}
 
-    for tx in transactions:
+    # Сортируем транзакции по дате (от самых свежих)
+    sorted_txs = sorted(
+        transactions,
+        key=lambda x: x.transaction_date if x.transaction_date else datetime.min,
+        reverse=True,
+    )
+
+    for tx in sorted_txs:
         amount = float(tx.amount)
         category = tx.category or "Прочее"
 
         if tx.type == TransactionType.INCOME.value or tx.type == "income":
-            total_income += amount
+            total_income_sum += amount
             income_by_category[category] = round(income_by_category.get(category, 0.0) + amount, 2)
             if "стипенди" in category.lower() or "стипенди" in (tx.description or "").lower():
-                guaranteed_income += amount
+                guaranteed_income_sum += amount
             else:
-                variable_income += amount
+                variable_income_sum += amount
         else:
-            total_expenses += amount
+            total_expenses_sum += amount
             expenses_by_category[category] = round(expenses_by_category.get(category, 0.0) + amount, 2)
             if category in regular_categories:
-                regular_expenses += amount
+                regular_expenses_sum += amount
                 regular_payments[category] = round(regular_payments.get(category, 0.0) + amount, 2)
             else:
-                discretionary_expenses += amount
-            if amount >= 1000.0:
+                discretionary_expenses_sum += amount
+
+            if amount >= 1000.0 and len(large_transactions) < 5:
+                dt_str = (
+                    tx.transaction_date.strftime("%d.%m.%Y")
+                    if hasattr(tx.transaction_date, "strftime")
+                    else str(tx.transaction_date)
+                )
                 large_transactions.append({
                     "category": category,
                     "description": tx.description or "Крупная покупка",
                     "amount": round(amount, 2),
-                    "date": tx.transaction_date.strftime("%d.%m.%Y") if hasattr(tx.transaction_date, "strftime") else str(tx.transaction_date),
+                    "date": dt_str,
                 })
 
-    total_income = round(total_income, 2)
-    total_expenses = round(total_expenses, 2)
-    guaranteed_income = round(guaranteed_income, 2)
-    variable_income = round(variable_income, 2)
-    regular_expenses = round(regular_expenses, 2)
-    discretionary_expenses = round(discretionary_expenses, 2)
+    # Приводим к среднемесячным значениям (в месяц)
+    monthly_income = round(total_income_sum / months_count, 2)
+    monthly_expenses = round(total_expenses_sum / months_count, 2)
+    guaranteed_income = round(guaranteed_income_sum / months_count, 2)
+    variable_income = round(variable_income_sum / months_count, 2)
+    regular_expenses = round(regular_expenses_sum / months_count, 2)
+    discretionary_expenses = round(discretionary_expenses_sum / months_count, 2)
+    free_cash_flow = round(monthly_income - monthly_expenses, 2)
 
-    sorted_expenses = dict(sorted(expenses_by_category.items(), key=lambda item: item[1], reverse=True))
+    avg_expenses_by_category = {
+        cat: round(amt / months_count, 2)
+        for cat, amt in sorted(expenses_by_category.items(), key=lambda item: item[1], reverse=True)
+    }
+    avg_income_by_category = {
+        cat: round(amt / months_count, 2)
+        for cat, amt in income_by_category.items()
+    }
+    avg_regular_payments = {
+        cat: round(amt / months_count, 2)
+        for cat, amt in regular_payments.items()
+    }
 
     return {
         "current_balance": round(current_balance, 2),
-        "total_income": total_income,
+        "total_income": monthly_income,
         "guaranteed_income": guaranteed_income,
         "variable_income": variable_income,
-        "total_expenses": total_expenses,
+        "total_expenses": monthly_expenses,
         "regular_expenses": regular_expenses,
         "discretionary_expenses": discretionary_expenses,
-        "income_by_category": income_by_category,
-        "expenses_by_category": sorted_expenses,
-        "regular_payments": regular_payments,
-        "large_transactions": large_transactions[:5],
-        "free_cash_flow": round(total_income - total_expenses, 2),
+        "income_by_category": avg_income_by_category,
+        "expenses_by_category": avg_expenses_by_category,
+        "regular_payments": avg_regular_payments,
+        "large_transactions": large_transactions,
+        "free_cash_flow": free_cash_flow,
+        "months_analyzed": months_count,
+        "raw_total_income": round(total_income_sum, 2),
+        "raw_total_expenses": round(total_expenses_sum, 2),
     }
 
 
@@ -580,42 +644,54 @@ def build_system_prompt(finance_summary: Dict[str, Any]) -> str:
     regular = finance_summary["regular_expenses"]
     discretionary = finance_summary["discretionary_expenses"]
     cash_flow = finance_summary["free_cash_flow"]
+    months_analyzed = finance_summary.get("months_analyzed", 1)
 
     expenses_lines = []
     for cat, amount in finance_summary["expenses_by_category"].items():
         percentage = round((amount / expenses * 100), 1) if expenses > 0 else 0
-        expenses_lines.append(f"  - {cat}: {amount:,.2f} руб. ({percentage}%)")
+        expenses_lines.append(f"  - {cat}: {amount:,.2f} руб./мес. ({percentage}%)")
     expenses_text = "\n".join(expenses_lines) if expenses_lines else "  Нет данных о расходах."
 
-    regular_lines = [f"  - {cat}: {amount:,.2f} руб." for cat, amount in finance_summary["regular_payments"].items()]
+    regular_lines = [
+        f"  - {cat}: {amount:,.2f} руб./мес."
+        for cat, amount in finance_summary["regular_payments"].items()
+    ]
     regular_text = "\n".join(regular_lines) if regular_lines else "  Нет регулярных платежей."
+
+    safe_savings_est = round(cash_flow * 0.9, 2) if cash_flow > 0 else 0.0
 
     return f"""Ты — персональный финансовый ИИ-ассистент.
 Твой пользователь: студент 18-25 лет, совмещающий учебу в вузе и подработку (фриланс / смены).
 
-ФИНАНСОВЫЙ ПРОФИЛЬ СТУДЕНТА ЗА ПОСЛЕДНИЙ МЕСЯЦ:
-- Баланс карты: {balance:,.2f} руб.
-- Общий месячный доход: {income:,.2f} руб.
-  * Гарантированная стипендия: {guaranteed:,.2f} руб.
-  * Доход от подработки / фриланса: {variable:,.2f} руб.
-- Общие месячные расходы: {expenses:,.2f} руб.
-  * Обязательные регулярные платежи: {regular:,.2f} руб.
-  * Гибкие расходы (кафе, фастфуд, развлечения): {discretionary:,.2f} руб.
-- Структура расходов по категориям:
+ФИНАНСОВЫЙ ПРОФИЛЬ СТУДЕНТА (СРЕДНЕМЕСЯЧНЫЕ ПОКАЗАТЕЛИ ЗА {months_analyzed} МЕС.):
+- Баланс дебетовой карты: {balance:,.2f} руб. (средства на текущую жизнь и питание)
+- Среднемесячный подтвержденный доход: {income:,.2f} руб./мес.
+  * Стипендия: {guaranteed:,.2f} руб./мес.
+  * Доход от подработки и смен: {variable:,.2f} руб./мес.
+- Среднемесячные расходы: {expenses:,.2f} руб./мес.
+  * Обязательные регулярные платежи (связь, транспорт, общежитие): {regular:,.2f} руб./мес.
+  * Гибкие расходы (столовая, супермаркеты, кафе, досуг): {discretionary:,.2f} руб./мес.
+- Реальный свободный остаток: {cash_flow:,.2f} руб./мес.
+- Безопасная сумма для накоплений с учетом 10% подушки безопасности: ~{safe_savings_est:,.2f} руб./мес.
+- Структура расходов по категориям в месяц:
 {expenses_text}
-- Обязательные регулярные списания:
+- Обязательные регулярные списания в месяц:
 {regular_text}
-- Свободный денежный поток: {cash_flow:,.2f} руб./мес.
 
 СТРОГИЕ ПРАВИЛА:
 1. Инструмент `calculate_savings_plan` предназначен ИСКЛЮЧИТЕЛЬНО для точного расчета плана накоплений на конкретную финансовую цель (когда пользователь хочет накопить, купить вещь или отложить конкретную сумму, например: «хочу накопить на ноутбук 60 000 ₽»).
-2. Если пользователь задает аналитический вопрос по своим расходам («Какая самая большая трата за последний месяц?», «На чем я могу сэкономить?», «Какой у меня баланс?», «Сколько уходит на кафе?»), отвечай структурированным текстом на основе данных из финансового профиля выше. В таких случаях ЗАПРЕЩЕНО вызывать инструмент `calculate_savings_plan`!
-3. Для расчетов по цели накоплений ЗАПРЕЩЕНО считать в уме — ОБЯЗАТЕЛЬНО вызывай инструмент `calculate_savings_plan`.
-4. Не давай индивидуальных инвестиционных рекомендаций (ИИР) и не принимай решения за пользователя.
-5. Отвечай дружелюбно, структурированно, понятным для студента языком.
-6. Если запрос НЕ связан с финансами (болтовня, код, учеба) — вежливо скажи, что ты финансовый помощник, и перечисли свои возможности. НЕ вызывай инструмент.
-7. Если указана иностранная валюта — объясни, что сервис работает только с рублями.
-8. Если запрос об инвестициях, кредитах, ипотеке — объясни ограничения и перенаправь.
+2. ВАЖНО: Среднемесячный свободный остаток студента составляет около {cash_flow:,.2f} руб./мес. Студент МОЖЕТ откладывать ТОЛЬКО безопасную часть от этого остатка (около {safe_savings_est:,.2f} руб./мес.).
+   Никогда не предлагай откладывать нереалистичные суммы вроде 50 000 руб./мес., если свободный остаток студента в месяц составляет около {cash_flow:,.2f} руб.!
+3. Текущий баланс карты ({balance:,.2f} руб.) — это операционные средства студента на еду и текущую жизнь. Не вычитай его из цели (передавай в tool current_savings=0.0), если только пользователь прямо не попросил использовать свои накопления.
+4. Если пользователь задает аналитический вопрос по своим расходам («Какая самая большая трата?», «На чем сэкономить?», «Какой у меня баланс?», «Сколько уходит на кафе?»), отвечай структурированным текстом на основе данных из финансового профиля выше. В таких случаях ЗАПРЕЩЕНО вызывать инструмент `calculate_savings_plan`!
+5. Для расчетов по цели накоплений ЗАПРЕЩЕНО считать в уме — ОБЯЗАТЕЛЬНО вызывай инструмент `calculate_savings_plan`.
+6. Не давай индивидуальных инвестиционных рекомендаций (ИИР) и не принимай решения за пользователя.
+7. Отвечай дружелюбно, структурированно, понятным для студента языком.
+8. Если запрос НЕ связан с финансами (болтовня, код, учеба) — вежливо скажи, что ты финансовый помощник, и перечисли свои возможности. НЕ вызывай инструмент.
+9. Если указана иностранная валюта — объясни, что сервис работает только с рублями.
+10. Если запрос об инвестициях, кредитах, ипотеке — объясни ограничения и перенаправь.
+11. КАТЕГОРИЧЕСКИ ЗАПРЕЩЕНО упоминать сессию, экзамены или стресс-сценарии в стандартных ответах, если пользователь САМ прямо не спросил о возможных трудностях или снижении дохода. Никаких упоминаний сессии «из воздуха»!
+12. Если пользователь САМ прямо спросил про сессию, экзамены, временные трудности или спад заработка — передавай в инструмент `calculate_savings_plan` аргумент include_stress_scenario=True и подробно проанализируй возможные риски и срок в ответе.
 """
 
 
@@ -665,7 +741,25 @@ def fallback_extract_target(user_query: str) -> Tuple[Optional[str], Optional[fl
             if len(title) > 60:
                 title = title[:57] + "..."
 
-    return title, amount, months
+    # Стартовые сбережения (только если пользователь прямо указал их в запросе)
+    stated_savings = 0.0
+    savings_match = re.search(
+        r"(?:уже\s+(?:есть|отложено|накоплено)|сбережени(?:я|й))\s*[:\-—]?\s*(\d+(?:[\s_]\d+)*)\s*(тыс(?:\.|яч[ей|и]?)?|k|к|руб(?:лей|\.)?|р\b)?",
+        user_query,
+        re.IGNORECASE,
+    )
+    if savings_match:
+        raw_s = re.sub(r"[\s_]+", "", savings_match.group(1))
+        u = (savings_match.group(2) or "").lower()
+        try:
+            s_val = float(raw_s)
+            if any(k in u for k in ["тыс", "k", "к"]) and s_val < 100000:
+                s_val *= 1000.0
+            stated_savings = s_val
+        except ValueError:
+            pass
+
+    return title, amount, months, stated_savings
 
 
 # =====================================================================
@@ -678,7 +772,7 @@ async def process_ai_financial_advice(
     user_balance: float,
 ) -> Dict[str, Any]:
     """
-    Основная логика ИИ-модуля для кейса Т-Банка:
+    Основная логика ИИ-модуля финансового ассистента:
     0. Классифицирует запрос (финансовый / нерелевантный / рискованный).
     1. Для нерелевантных — возвращает лёгкий ответ без расчётов.
     2. Для рискованных — обозначает ограничения без вызова Tool Calling.
@@ -750,7 +844,7 @@ async def process_ai_financial_advice(
 
     calculation_result: Optional[Dict[str, Any]] = None
     ai_advice_text: str = ""
-    goal_title, extracted_amount, extracted_months = fallback_extract_target(user_query)
+    goal_title, extracted_amount, extracted_months, stated_savings = fallback_extract_target(user_query)
 
     messages = [
         {"role": "system", "content": system_prompt},
@@ -782,17 +876,40 @@ async def process_ai_financial_advice(
                     raw_target = tool_args.get("target_amount") or extracted_amount
 
                     if raw_target and float(raw_target) > 0:
+                        # Проверяем, заявлял ли пользователь о наличии стартовых сбережений на цель
+                        user_stated_savings = bool(
+                            re.search(
+                                r"(у меня (?:уже )?(?:есть|отложено)|накоплено|сбережения?|стартов(?:ый|ые))",
+                                user_query,
+                                re.IGNORECASE,
+                            )
+                        )
+                        passed_savings = float(tool_args.get("current_savings", 0.0))
+                        # Если пользователь явно не называл сбережения, не тратим операционный баланс карты
+                        actual_savings = passed_savings if user_stated_savings else 0.0
+
+                        # Проверяем, спрашивал ли пользователь о трудностях, экзаменах или снижении дохода
+                        has_hardship_query = bool(
+                            re.search(
+                                r"(сесси[яиею]|экзамен[ыа]|спад|трудн|проблем|сложност|увольн|болезн|форс-мажор|если.*(?:упадет|снизится|меньше|сократ)|хватит ли)",
+                                user_query,
+                                re.IGNORECASE,
+                            )
+                        )
+                        include_stress = bool(tool_args.get("include_stress_scenario", False)) or has_hardship_query
+
                         calculation_result = calculate_savings_plan(
                             target_amount=float(raw_target),
-                            monthly_income=float(tool_args.get("monthly_income", finance_summary["total_income"])),
-                            monthly_expenses=float(tool_args.get("monthly_expenses", finance_summary["total_expenses"])),
-                            guaranteed_income=float(tool_args.get("guaranteed_income", finance_summary["guaranteed_income"])),
-                            variable_income=float(tool_args.get("variable_income", finance_summary["variable_income"])),
-                            regular_expenses=float(tool_args.get("regular_expenses", finance_summary["regular_expenses"])),
-                            discretionary_expenses=float(tool_args.get("discretionary_expenses", finance_summary["discretionary_expenses"])),
-                            current_savings=float(tool_args.get("current_savings", 0.0)),
+                            monthly_income=float(finance_summary["total_income"]),
+                            monthly_expenses=float(finance_summary["total_expenses"]),
+                            guaranteed_income=float(finance_summary["guaranteed_income"]),
+                            variable_income=float(finance_summary["variable_income"]),
+                            regular_expenses=float(finance_summary["regular_expenses"]),
+                            discretionary_expenses=float(finance_summary["discretionary_expenses"]),
+                            current_savings=actual_savings,
                             target_months=tool_args.get("target_months") or extracted_months,
                             risk_buffer_percent=float(tool_args.get("risk_buffer_percent", 10.0)),
+                            include_stress_scenario=include_stress,
                         )
 
                         messages.append({
@@ -824,6 +941,14 @@ async def process_ai_financial_advice(
             user_query, re.IGNORECASE
         )
 
+        has_hardship_query = bool(
+            re.search(
+                r"(сесси[яиею]|экзамен[ыа]|спад|трудн|проблем|сложност|увольн|болезн|форс-мажор|если.*(?:упадет|снизится|меньше|сократ)|хватит ли)",
+                user_query,
+                re.IGNORECASE,
+            )
+        )
+
         if savings_markers and extracted_amount and extracted_amount > 0:
             # Запрос про конкретное накопление — делаем резервный расчёт
             calculation_result = calculate_savings_plan(
@@ -834,8 +959,9 @@ async def process_ai_financial_advice(
                 variable_income=finance_summary["variable_income"],
                 regular_expenses=finance_summary["regular_expenses"],
                 discretionary_expenses=finance_summary["discretionary_expenses"],
-                current_savings=0.0,
+                current_savings=stated_savings,
                 target_months=extracted_months,
+                include_stress_scenario=has_hardship_query,
             )
 
             top_cats = list(finance_summary["expenses_by_category"].items())[:3]
@@ -845,7 +971,7 @@ async def process_ai_financial_advice(
                 months_text = f"{calculation_result['estimated_months']} мес." if calculation_result['estimated_months'] else "12 мес."
                 stress_info = ""
                 if calculation_result.get("stress_scenario_months"):
-                    stress_info = f"\n- В период сессии (при спаде подработки на 40%): **{calculation_result['stress_scenario_months']} мес.**"
+                    stress_info = f"\n- В период возможных трудностей (при спаде подработки на 40%): **{calculation_result['stress_scenario_months']} мес.**"
 
                 ai_advice_text = (
                     f"🎯 **Финансовый план накопления для студента**\n\n"
@@ -856,7 +982,7 @@ async def process_ai_financial_advice(
                     f"- Срок достижения цели: **{months_text}**{stress_info}\n\n"
                     f"💡 **Рекомендации:**\n"
                     f"Основные гибкие траты: {top_cats_text}. "
-                    f"Сократив их на 10-15%, вы создадите подушку безопасности и достигнете цели даже в сессию!"
+                    f"Сократив их на 10-15%, вы создадите подушку безопасности и быстрее достигнете цели!"
                 )
             else:
                 ai_advice_text = (
@@ -896,7 +1022,7 @@ async def process_ai_financial_advice(
             f"Настроить автоперевод в копилку: переводить {monthly_save / 2:,.0f} руб. в день стипендии и в день зарплаты.",
             "Установить недельный лимит на кафе и доставку еды в приложении банка.",
             "Проверить платные подписки и отключить неиспользуемые.",
-            "Не трогать подушку безопасности (10% от свободных средств) на случай сессии.",
+            "Не трогать подушку безопасности (10% от свободных средств) на случай непредвиденных расходов.",
         ]
 
     # Данные для сохранения цели в БД формируются только если цель реально рассчитывалась

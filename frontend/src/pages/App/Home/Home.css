@@ -75,12 +75,22 @@ html, body, #root {
   border-radius: 4px;
 }
 
+/* Верхняя панель: выбор месяца и баланс */
+.dashboard-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 20px;
+  margin-bottom: 40px;
+  max-width: 1080px;
+}
+
 /* Переключатель месяца */
 .month-selector {
   display: flex;
   align-items: center;
   gap: 15px;
-  margin-bottom: 40px;
 }
 
 .month-badge {
@@ -108,7 +118,94 @@ html, body, #root {
   font-size: 24px;
   cursor: pointer;
   padding: 0 5px;
+  transition: transform 0.15s ease, color 0.15s ease;
 }
+
+.nav-arrow:hover {
+  color: #34d399;
+  transform: scale(1.15);
+}
+
+/* Лаконичная карточка текущего баланса */
+.current-balance-card {
+  height: 60px;
+  background: rgba(255, 255, 255, 0.045);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 20px;
+  padding: 0 22px 0 16px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  backdrop-filter: blur(12px);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+  transition: all 0.2s ease;
+  user-select: none;
+}
+
+.current-balance-card:hover {
+  background: rgba(255, 255, 255, 0.07);
+  border-color: rgba(52, 211, 153, 0.35);
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.25);
+}
+
+.balance-icon-pill {
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
+  background: rgba(16, 185, 129, 0.15);
+  color: #34d399;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border: 1px solid rgba(16, 185, 129, 0.25);
+}
+
+.balance-text-block {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.balance-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: #9ca3af;
+  line-height: 1.1;
+}
+
+.balance-value {
+  font-size: 21px;
+  font-weight: 700;
+  color: #ffffff;
+  letter-spacing: -0.3px;
+  line-height: 1.2;
+}
+
+.balance-trend-badge {
+  margin-left: 6px;
+  font-size: 11.5px;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 16px;
+  white-space: nowrap;
+}
+
+.balance-trend-badge.positive {
+  background: rgba(16, 185, 129, 0.15);
+  color: #34d399;
+  border: 1px solid rgba(16, 185, 129, 0.25);
+}
+
+.balance-trend-badge.negative {
+  background: rgba(239, 68, 68, 0.15);
+  color: #f87171;
+  border: 1px solid rgba(239, 68, 68, 0.25);
+}
+
 
 /* Секции карточек */
 .cards-section {
@@ -182,69 +279,6 @@ html, body, #root {
   font-size: 15px;
   color: #444444;
   word-break: break-word;
-}
-
-/* Меню 3 точек и кнопка удаления */
-.card-more {
-  position: absolute;
-  bottom: 10px;
-  right: 20px;
-  font-size: 20px;
-  font-weight: bold;
-  cursor: pointer;
-  user-select: none;
-  padding: 0 5px;
-}
-
-.card-dropdown-menu {
-  position: absolute;
-  bottom: 35px;
-  right: 15px;
-  background-color: #ffffff;
-  border-radius: 8px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
-  padding: 5px;
-  z-index: 10;
-}
-
-.delete-btn {
-  background: none;
-  border: none;
-  color: #e53935;
-  font-size: 14px;
-  font-weight: 600;
-  padding: 6px 12px;
-  cursor: pointer;
-  border-radius: 4px;
-  width: 100%;
-  text-align: left;
-}
-
-.delete-btn:hover {
-  background-color: #ffebee;
-}
-
-/* Кнопка создания карточки */
-.add-card-btn {
-  width: 49px;
-  height: 49px;
-  border-radius: 50%;
-  background-color: #d9d9d9;
-  border: none;
-  font-size: 30px;
-  line-height: 49px;
-  text-align: center;
-  color: #000000;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  transition: transform 0.1s ease;
-}
-
-.add-card-btn:hover {
-  transform: scale(1.08);
 }
 
 /* 3. Чат справа */
@@ -347,3 +381,755 @@ html, body, #root {
   cursor: pointer;
   font-weight: bold;
 }
+
+/* =====================================================================
+   Стили для кликабельных карточек категорий
+   ===================================================================== */
+.clickable-card {
+  cursor: pointer;
+  transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.2s ease;
+  user-select: none;
+}
+
+.clickable-card:hover {
+  transform: translateY(-6px);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.35);
+}
+
+.card-footer-hint {
+  margin-top: auto;
+  padding-top: 14px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 13px;
+  color: rgba(0, 0, 0, 0.55);
+  font-weight: 600;
+  border-top: 1px dashed rgba(0, 0, 0, 0.1);
+}
+
+.card-hint-arrow {
+  font-size: 15px;
+  transition: transform 0.2s ease;
+}
+
+.clickable-card:hover .card-hint-arrow {
+  transform: translateX(4px);
+}
+
+/* =====================================================================
+   Модальное окно подробного просмотра операций по категории
+   ===================================================================== */
+.modal-category-details {
+  background-color: #242426;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 28px;
+  width: 580px;
+  max-width: 92vw;
+  max-height: 86vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.6);
+  overflow: hidden;
+  animation: modal-pop 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes modal-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.94) translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+/* Шапка детальной модалки */
+.modal-detail-header {
+  padding: 24px 28px 18px 28px;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.detail-header-left {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.detail-type-badge {
+  font-size: 11.5px;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 12px;
+  display: inline-block;
+  width: fit-content;
+  letter-spacing: 0.2px;
+}
+
+.detail-type-badge.income {
+  background: rgba(16, 185, 129, 0.15);
+  color: #34d399;
+  border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+.detail-type-badge.expense {
+  background: rgba(239, 68, 68, 0.15);
+  color: #f87171;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+.detail-category-title {
+  font-size: 24px;
+  font-weight: 700;
+  color: #ffffff;
+  letter-spacing: -0.3px;
+}
+
+.modal-close-icon {
+  background: rgba(255, 255, 255, 0.08);
+  border: none;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  color: #9ca3af;
+  font-size: 16px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+
+.modal-close-icon:hover {
+  background: rgba(255, 255, 255, 0.2);
+  color: #ffffff;
+  transform: rotate(90deg);
+}
+
+/* Сетка показателей */
+.detail-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+  gap: 10px;
+  padding: 16px 28px;
+  background: rgba(0, 0, 0, 0.25);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.detail-stat-card {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  padding: 10px 14px;
+  border-radius: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.stat-label {
+  font-size: 11px;
+  color: #9ca3af;
+  font-weight: 500;
+}
+
+.stat-value {
+  font-size: 16px;
+  font-weight: 700;
+  color: #ffffff;
+}
+
+.income-color {
+  color: #34d399 !important;
+}
+
+.expense-color {
+  color: #f87171 !important;
+}
+
+/* Секция списка операций */
+.detail-transactions-section {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 220px;
+  max-height: 380px;
+}
+
+.detail-transactions-section::-webkit-scrollbar {
+  width: 6px;
+}
+
+.detail-transactions-section::-webkit-scrollbar-thumb {
+  background-color: rgba(255, 255, 255, 0.15);
+  border-radius: 4px;
+}
+
+.detail-section-title {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 14px;
+  font-weight: 700;
+  color: #d1d5db;
+}
+
+.tx-count-pill {
+  font-size: 11px;
+  background: rgba(255, 255, 255, 0.08);
+  padding: 3px 10px;
+  border-radius: 12px;
+  color: #9ca3af;
+  font-weight: 500;
+}
+
+.detail-transactions-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.tx-item-row {
+  background: rgba(255, 255, 255, 0.035);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  padding: 12px 16px;
+  border-radius: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  transition: all 0.15s ease;
+}
+
+.tx-item-row:hover {
+  background: rgba(255, 255, 255, 0.07);
+  transform: translateX(2px);
+}
+
+.tx-item-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+  min-width: 0;
+}
+
+.tx-icon-circle {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 15px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.tx-icon-circle.income {
+  background: rgba(16, 185, 129, 0.2);
+  color: #34d399;
+}
+
+.tx-icon-circle.expense {
+  background: rgba(239, 68, 68, 0.2);
+  color: #f87171;
+}
+
+.tx-info-block {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
+.tx-description {
+  font-size: 14.5px;
+  font-weight: 600;
+  color: #f3f4f6;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tx-date {
+  font-size: 12px;
+  color: #9ca3af;
+}
+
+.tx-amount {
+  font-size: 16px;
+  font-weight: 700;
+  white-space: nowrap;
+  letter-spacing: -0.3px;
+}
+
+/* Пустое состояние */
+.empty-transactions-placeholder {
+  text-align: center;
+  padding: 30px 10px;
+  color: #9ca3af;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.empty-icon {
+  font-size: 32px;
+}
+
+/* Подвал */
+.modal-detail-footer {
+  padding: 16px 28px 20px 28px;
+  display: flex;
+  justify-content: flex-end;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.btn-close-detail {
+  background: #3b8e68;
+  color: #ffffff;
+  border: none;
+  padding: 10px 24px;
+  border-radius: 12px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-close-detail:hover {
+  background: #2f7353;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(59, 142, 104, 0.3);
+}
+
+/* Состояние отсутствия данных за выбранный месяц */
+.empty-month-container {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1.5px dashed rgba(255, 255, 255, 0.12);
+  border-radius: 20px;
+  padding: 28px 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: 8px;
+  width: 100%;
+  max-width: 440px;
+  backdrop-filter: blur(8px);
+  transition: all 0.2s ease;
+}
+
+.empty-month-container:hover {
+  border-color: rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.045);
+}
+
+.empty-month-icon {
+  font-size: 32px;
+  margin-bottom: 2px;
+  opacity: 0.9;
+}
+
+.empty-month-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: #f3f4f6;
+  letter-spacing: -0.2px;
+}
+
+.empty-month-subtitle {
+  font-size: 13px;
+  color: #9ca3af;
+  line-height: 1.4;
+}
+
+/* Статус загрузки карточек */
+.cards-status-box {
+  padding: 24px 28px;
+  color: #9ca3af;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: rgba(255, 255, 255, 0.02);
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  width: fit-content;
+}
+
+.status-spinner {
+  font-size: 18px;
+  display: inline-block;
+  animation: pulse-spin 1.5s infinite linear;
+}
+
+@keyframes pulse-spin {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.15); }
+  100% { transform: scale(1); }
+}
+
+/* Правая часть хедера: баланс + профиль пользователя */
+.header-right-actions {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.user-profile-widget {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: rgba(30, 41, 59, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 8px 16px;
+  border-radius: 18px;
+  backdrop-filter: blur(12px);
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+}
+
+.user-avatar-badge {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 15px;
+  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.35);
+  flex-shrink: 0;
+}
+
+.user-text-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.user-name-span {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: #f8fafc;
+  line-height: 1.2;
+}
+
+.user-email-span {
+  font-size: 11.5px;
+  color: #94a3b8;
+  line-height: 1.1;
+  max-width: 140px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.user-logout-button {
+  background: rgba(239, 68, 68, 0.12);
+  border: 1px solid rgba(239, 68, 68, 0.25);
+  color: #fca5a5;
+  padding: 6px 12px;
+  border-radius: 10px;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  margin-left: 4px;
+}
+
+.user-logout-button:hover {
+  background: rgba(239, 68, 68, 0.25);
+  color: #fee2e2;
+  border-color: rgba(239, 68, 68, 0.45);
+}
+
+/* Иконки в сайдбаре */
+.circle-btn.active-app-icon {
+  background: linear-gradient(135deg, #3b82f6, #2563eb);
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  font-size: 14px;
+  letter-spacing: 0.5px;
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.35);
+}
+
+.circle-btn.logout-circle-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  background-color: rgba(239, 68, 68, 0.15);
+  border: 1px solid rgba(239, 68, 68, 0.25);
+  font-size: 18px;
+  transition: all 0.2s ease;
+}
+
+.circle-btn.logout-circle-btn:hover {
+  background-color: rgba(239, 68, 68, 0.3);
+  transform: scale(1.08);
+}
+
+/* ==========================================================================
+   Секция и Карточки Финансовых Целей (Goals)
+   ========================================================================== */
+.goals-section {
+  margin-bottom: 24px;
+}
+
+.section-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.section-count-tag {
+  background: rgba(59, 130, 246, 0.18);
+  color: #60a5fa;
+  font-size: 13px;
+  font-weight: 700;
+  padding: 2px 10px;
+  border-radius: 9999px;
+  border: 1px solid rgba(59, 130, 246, 0.35);
+  margin-left: 8px;
+  vertical-align: middle;
+}
+
+.goals-cards-row {
+  display: flex;
+  gap: 20px;
+  overflow-x: auto;
+  padding-bottom: 8px;
+  scrollbar-width: thin;
+}
+
+/* Карточка цели */
+.goal-card {
+  width: 270px;
+  height: 165px;
+  background-color: #eae4d8;
+  border-radius: 20px;
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  position: relative;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+  overflow: hidden;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.goal-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.45);
+}
+
+.goal-card-header {
+  background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+  color: #ffffff;
+  padding: 10px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 14px;
+  font-weight: 700;
+  border-top-left-radius: 20px;
+  border-top-right-radius: 20px;
+}
+
+.goal-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 200px;
+}
+
+.goal-flag-icon {
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+.goal-title-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.goal-card-close-btn {
+  background: rgba(255, 255, 255, 0.2);
+  border: none;
+  color: #ffffff;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  font-size: 11px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+
+.goal-card-close-btn:hover {
+  background: rgba(239, 68, 68, 0.85);
+  transform: scale(1.15);
+}
+
+.goal-card-body {
+  padding: 10px 14px 12px 14px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  flex: 1;
+  color: #1a1a1a;
+}
+
+.goal-amount-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.goal-amount {
+  font-size: 20px;
+  font-weight: 800;
+  color: #1e1e1e;
+  letter-spacing: -0.5px;
+}
+
+.goal-status-badge {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 6px;
+  background: rgba(37, 99, 235, 0.12);
+  color: #1d4ed8;
+}
+
+.goal-progress-box {
+  margin: 4px 0 2px 0;
+}
+
+.goal-progress-track {
+  width: 100%;
+  height: 6px;
+  background: rgba(0, 0, 0, 0.1);
+  border-radius: 9999px;
+  overflow: hidden;
+}
+
+.goal-progress-bar {
+  height: 100%;
+  background: linear-gradient(90deg, #3b82f6, #10b981);
+  border-radius: 9999px;
+  transition: width 0.3s ease;
+}
+
+.goal-progress-info {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  font-weight: 600;
+  color: #64748b;
+  margin-top: 3px;
+}
+
+.goal-card-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: 5px;
+  border-top: 1px dashed rgba(0, 0, 0, 0.1);
+  font-size: 11.5px;
+}
+
+.goal-deadline-pill {
+  color: #475569;
+  font-weight: 600;
+}
+
+.goal-ai-pill {
+  background: #dbeafe;
+  color: #1e40af;
+  font-size: 10.5px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 6px;
+}
+
+/* Баннер пустого списка целей */
+.empty-goals-banner {
+  background: rgba(59, 130, 246, 0.05);
+  border: 1.5px dashed rgba(59, 130, 246, 0.25);
+  border-radius: 18px;
+  padding: 16px 22px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  max-width: 600px;
+  backdrop-filter: blur(8px);
+  transition: all 0.2s ease;
+}
+
+.empty-goals-banner:hover {
+  background: rgba(59, 130, 246, 0.08);
+  border-color: rgba(59, 130, 246, 0.4);
+}
+
+.empty-goals-left {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.empty-goals-icon {
+  font-size: 28px;
+  flex-shrink: 0;
+}
+
+.empty-goals-texts {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.empty-goals-heading {
+  font-size: 14px;
+  font-weight: 700;
+  color: #e2e8f0;
+}
+
+.empty-goals-subtext {
+  font-size: 12.5px;
+  color: #94a3b8;
+  line-height: 1.4;
+}
+
+.empty-goals-subtext em {
+  color: #60a5fa;
+  font-style: normal;
+  font-weight: 600;
+}

@@ -100,7 +100,7 @@ class SavingsPlanResult(BaseModel):
     safe_monthly_savings: float = Field(..., description="Безопасная сумма отчислений с учетом резерва (руб.)")
     required_monthly_savings: float = Field(..., description="Необходимая сумма отчислений в месяц (руб.)")
     estimated_months: Optional[int] = Field(None, description="Расчетный срок накопления в месяцах (базовый сценарий)")
-    stress_scenario_months: Optional[int] = Field(None, description="Срок при снижении подработки на 40% (сессия/экзамены)")
+    stress_scenario_months: Optional[int] = Field(None, description="Срок при снижении подработки на 40% (при трудностях или спаде дохода)")
     is_achievable: bool = Field(..., description="Достижима ли цель в текущих условиях")
     daily_savings_recommendation: float = Field(..., description="Рекомендуемая сумма в день (руб.)")
     weekly_savings_recommendation: float = Field(..., description="Рекомендуемая сумма в неделю (руб.)")
